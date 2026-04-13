@@ -1,32 +1,21 @@
 import os
 
 def generate_gradle_files():
-    # 1. Project-level build.gradle
+    # 1. build.gradle (Root)
     build_gradle_content = """
 buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
+    repositories { google(); mavenCentral() }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.7.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21"
     }
 }
-
 allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-task clean(type: Delete) {
-    delete rootProject.buildDir
+    repositories { google(); mavenCentral() }
 }
 """
 
-    # 2. App-level build.gradle
+    # 2. app/build.gradle
     app_gradle_content = """
 plugins {
     id 'com.android.application'
@@ -37,95 +26,47 @@ plugins {
 android {
     namespace 'com.watermarker'
     compileSdk 35
-
     defaultConfig {
         applicationId "com.watermarker"
         minSdk 24
         targetSdk 35
         versionCode 1
         versionName "1.0"
-
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        
-        externalNativeBuild {
-            cmake {
-                cppFlags ""
-            }
-        }
+        externalNativeBuild { cmake { cppFlags "" } }
     }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-    
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
-    }
-    
-    kotlinOptions {
-        jvmTarget = '11'
-    }
-
-    buildFeatures {
-        compose true
-    }
-
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
+    buildFeatures { compose true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    kotlinOptions { jvmTarget = '11' }
+    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.15.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'androidx.activity:activity-compose:1.9.3'
     implementation platform('androidx.compose:compose-bom:2024.10.01')
     implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.ui:ui-graphics'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
-    
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    // Logic Fault Fix: Added Material components for XML theme support
+    implementation 'com.google.android.material:material:1.12.0'
 }
 """
 
-    # 3. settings.gradle
-    settings_gradle_content = """
-rootProject.name = "WaterMarker"
-include ':app'
-"""
+    # 3. settings.gradle & gradle.properties
+    settings_content = "rootProject.name = 'WaterMarker'\\ninclude ':app'"
+    properties_content = "android.useAndroidX=true\\nandroid.enableJetifier=true"
 
-    # 4. gradle.properties
-    # Logic Fault Fix: Enabling AndroidX is mandatory for Compose and modern libraries
-    gradle_properties_content = """
-android.useAndroidX=true
-android.enableJetifier=true
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-"""
-
-    # Dictionary mapping paths to content
     files = {
         "build.gradle": build_gradle_content,
         "app/build.gradle": app_gradle_content,
-        "settings.gradle": settings_gradle_content,
-        "gradle.properties": gradle_properties_content
+        "settings.gradle": settings_content,
+        "gradle.properties": properties_content
     }
 
-    # Generate the files
     for path, content in files.items():
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         with open(path, "w") as f:
             f.write(content.strip())
-    
-    print("✅ Gradle configuration and properties updated.")
+    print("✅ Gradle configs and AndroidX properties updated.")
 
 if __name__ == "__main__":
     generate_gradle_files()
