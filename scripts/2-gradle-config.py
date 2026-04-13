@@ -1,18 +1,17 @@
 import os
 
 def generate_gradle_files():
-    # Fix: Added settings.gradle to define the project structure
+    # Logic Fix: Added settings.gradle to define the project structure
     settings_content = """
 rootProject.name = "WaterMarker"
 include ':app'
 """
 
-    # Existing root build.gradle logic
-    build_gradle_content = """
+    root_gradle_content = """
 buildscript {
     repositories { google(); mavenCentral() }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.2'
+        classpath 'com.android.tools.build:gradle:8.7.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21"
     }
 }
@@ -21,7 +20,6 @@ allprojects {
 }
 """
 
-    # App-level build.gradle with proper Compose dependencies
     app_gradle_content = """
 plugins {
     id 'com.android.application'
@@ -40,23 +38,26 @@ android {
         versionName "1.0"
         externalNativeBuild { cmake { cppFlags "" } }
     }
+    buildTypes { release { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    kotlinOptions { jvmTarget = '11' }
     buildFeatures { compose true }
     externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
 
 dependencies {
-    implementation platform('androidx.compose:compose-bom:2024.10.00')
+    implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation platform('androidx.compose:compose-bom:2024.10.01')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.6'
 }
 """
 
     files = {
         "settings.gradle": settings_content,
-        "build.gradle": build_gradle_content,
+        "build.gradle": root_gradle_content,
         "app/build.gradle": app_gradle_content
     }
 
@@ -64,7 +65,7 @@ dependencies {
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         with open(path, "w") as f:
             f.write(content.strip())
-    print("✅ Logic Fix: settings.gradle and build files generated.")
+    print("✅ Gradle configuration files updated.")
 
 if __name__ == "__main__":
     generate_gradle_files()
