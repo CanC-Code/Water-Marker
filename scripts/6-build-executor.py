@@ -4,24 +4,22 @@ import subprocess
 def run_build():
     print("🏗️ Initializing Final Build...")
     
-    # Logic Fix: Navigate to root if script is run from /scripts
+    # Ensure we are in the root directory
     if os.path.basename(os.getcwd()) == "scripts":
         os.chdir("..")
 
     try:
-        # Force stable Gradle version to avoid API breaks
+        # Logic Fault Fix: Ensure local wrapper is generated and prioritized
         if not os.path.exists("gradlew"):
             print("📦 Generating stable Gradle 8.10.2 wrapper...")
             subprocess.run(["gradle", "wrapper", "--gradle-version", "8.10.2"], check=True)
         
-        # Ensure wrapper is executable
         subprocess.run(["chmod", "+x", "gradlew"], check=True)
         
-        print("🚀 Running Clean Build...")
-        # Use clean to ensure no leftover artifacts from previous failed attempts
+        print("🚀 Executing Clean Build via Wrapper...")
+        # CRITICAL: Always use ./gradlew to ensure the 8.10.2 version is used
         subprocess.run(["./gradlew", "clean", "assembleDebug", "--no-daemon"], check=True)
-        print("✅ Build Successful! APK located in app/build/outputs/apk/debug/")
-        
+        print("✅ Build Successful!")
     except subprocess.CalledProcessError as e:
         print(f"❌ Build failed with exit code {e.returncode}")
         exit(1)
