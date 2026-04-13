@@ -1,7 +1,7 @@
 import os
 
 def generate_gradle_files():
-    # 1. settings.gradle - Now the SOLE authority for repositories
+    # 1. settings.gradle
     settings_gradle = """
 pluginManagement {
     repositories {
@@ -26,9 +26,12 @@ include ':app'
 android.useAndroidX=true
 android.nonTransitiveRClass=true
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+# Required for modern Kotlin/Compose compatibility
+kotlin.code.style=official
 """
 
-    # 3. Root build.gradle - CLEANED (Removed allprojects/repositories)
+    # 3. Root build.gradle
+    # Updated AGP to 8.7.0 and Kotlin to 2.1.0 for Gradle 8.x compatibility
     root_build_gradle = """
 buildscript {
     repositories {
@@ -36,12 +39,12 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
+        classpath 'com.android.tools.build:gradle:8.7.0'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0'
+        // Compose Compiler is now a dedicated plugin in Kotlin 2.0+
+        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.1.0'
     }
 }
-
-// All project-wide repository logic is now handled in settings.gradle
 """
 
     # 4. app/build.gradle
@@ -49,16 +52,17 @@ buildscript {
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
     namespace 'com.watermarker'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.watermarker"
         minSdk 24
-        targetSdk 34
+        targetSdk 35
         versionCode 1
         versionName "1.0"
 
@@ -94,10 +98,6 @@ android {
     buildFeatures {
         compose true
     }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.4'
-    }
     
     applicationVariants.all { variant ->
         variant.outputs.all {
@@ -107,10 +107,10 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
-    implementation 'androidx.activity:activity-compose:1.8.2'
-    implementation platform('androidx.compose:compose-bom:2023.10.01')
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.0'
+    implementation 'androidx.activity:activity-compose:1.10.0'
+    implementation platform('androidx.compose:compose-bom:2025.02.00')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.material3:material3'
@@ -124,14 +124,12 @@ dependencies {
         "app/build.gradle": app_build_gradle
     }
 
-    print("📝 Updating Gradle configuration files (Fixing Repo Conflict)...")
+    print("📝 Updating Gradle configuration for 2026 standards...")
     for path, content in files.items():
-        try:
-            with open(path, "w") as f:
-                f.write(content.strip())
-            print(f"✅ Updated: {path}")
-        except Exception as e:
-            print(f"❌ Failed to write {path}: {e}")
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+        with open(path, "w") as f:
+            f.write(content.strip())
+    print("✅ Configuration updated.")
 
 if __name__ == "__main__":
     generate_gradle_files()
