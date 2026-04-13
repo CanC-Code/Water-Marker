@@ -26,15 +26,19 @@ class NativeEngine {
 }
 """
 
-    # 2. MainActivity.kt - The UI and Touch Logic
-    # This is a large file, it replicates your HTML state and touch engine
+    # 2. MainActivity.kt - Full Logic with Save Functionality
     main_activity_content = """
 package com.watermarker
 
+import android.content.ContentValues
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -54,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.InputStream
+import java.io.OutputStream
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,15 +75,22 @@ fun WaterMarkerUI() {
     var baseBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var overlayBitmap by remember { mutableStateOf<Bitmap?>(null) }
     
-    // State mirroring your HTML logic
-    var x by remember { mutableStateOf(500f) }
-    var y by remember { mutableStateOf(500f) }
+    // State mirroring your HTML logic (Coordinates in pixels relative to base)
+    var x by remember { mutableStateOf(0f) }
+    var y by remember { mutableStateOf(0f) }
     var scale by remember { mutableStateOf(0.2f) }
     var rotation by remember { mutableStateOf(0f) }
     var opacity by remember { mutableStateOf(0.8f) }
 
     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { baseBitmap = decodeUri(context, it) }
+        uri?.let { 
+            val b = decodeUri(context, it)
+            b?.let {
+                baseBitmap = it
+                x = it.width / 2f
+                y = it.height / 2f
+            }
+        }
     }
     
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -88,13 +100,21 @@ fun WaterMarkerUI() {
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF020617))) {
         // Header
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("1. SELECT OVERLAY", color = Color(0xFF38BDF8), fontSize = 10.sp)
-            Button(onClick = { overlayPicker.launch("image/*") }) { Text("Load Overlay") }
+            Text("1. SELECT OVERLAY", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { overlayPicker.launch("image/*") },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A))
+            ) { Text("Load Overlay", color = Color.White) }
         }
 
         // Sub-header
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("2. SUBJECT IMAGE", color = Color(0xFF38BDF8), fontSize = 10.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(16.dp), 
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("2. SUBJECT IMAGE", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             Button(onClick = { basePicker.launch("image/*") }) { Text("Load Subject") }
         }
 
@@ -109,31 +129,71 @@ fun WaterMarkerUI() {
         }) {
             baseBitmap?.let {
                 Canvas(modifier = Modifier.fillMaxSize()) {
+                    // This draws a simple preview. 
+                    // In a pixel-perfect app, we'd use DrawScope transformation to match C++ logic.
                     drawImage(it.asImageBitmap())
-                    // Note: In a real app, we'd draw a preview here.
-                    // For the "Save" step, we call the Native C++ Engine.
                 }
+            } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No Image Loaded", color = Color.DarkGray)
             }
         }
 
         // Footer
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Overlay Opacity: ${(opacity * 100).toInt()}%", color = Color.White)
-            Slider(value = opacity, onValueChange = { opacity = it })
+        Column(modifier = Modifier.background(Color(0xFF0F172A)).padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Overlay Opacity", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                Text("${(opacity * 100).toInt()}%", color = Color(0xFF38BDF8), fontSize = 11.sp)
+            }
+            Slider(value = opacity, onValueChange = { opacity = it }, colors = SliderDefaults.colors(thumbColor = Color(0xFF38BDF8)))
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Button(
-                onClick = { /* Call NativeEngine().blendImages(...) then save to file */ },
+                onClick = {
+                    if (baseBitmap != null && overlayBitmap != null) {
+                        saveFullResolution(context, baseBitmap!!, overlayBitmap!!, x, y, scale, rotation, opacity)
+                    } else {
+                        Toast.makeText(context, "Select both images first", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))
             ) {
-                Text("SAVE FULL RESOLUTION", color = Color.Black)
+                Text("SAVE FULL RESOLUTION", color = Color(0xFF020617), fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
             }
         }
     }
 }
 
-fun decodeUri(context: android.content.Context, uri: Uri): Bitmap? {
+fun decodeUri(context: Context, uri: Uri): Bitmap? {
     val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-    return BitmapFactory.decodeStream(inputStream)
+    val original = BitmapFactory.decodeStream(inputStream)
+    // Create a mutable copy in ARGB_8888 so C++ can manipulate pixels
+    return original?.copy(Bitmap.Config.ARGB_8888, true)
+}
+
+fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, scale: Float, rotation: Float, opacity: Float) {
+    // 1. Run the Native C++ Engine
+    NativeEngine().blendImages(base, overlay, x, y, scale, rotation, opacity)
+
+    // 2. Save to Media Store
+    val filename = "WaterMarker_${System.currentTimeMillis()}.png"
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WaterMarker")
+        }
+    }
+
+    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+    uri?.let {
+        val outputStream: OutputStream? = context.contentResolver.openOutputStream(it)
+        outputStream?.use { stream ->
+            base.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            Toast.makeText(context, "Saved to Gallery!", Toast.LENGTH_LONG).show()
+        }
+    }
 }
 """
 
@@ -142,12 +202,17 @@ fun decodeUri(context: android.content.Context, uri: Uri): Bitmap? {
         "app/src/main/java/com/watermarker/MainActivity.kt": main_activity_content
     }
 
+    print("📱 Generating Kotlin UI and JNI Bridge...")
     for path, content in files.items():
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(content.strip())
-            
-    print("📱 Kotlin UI and JNI Bridge Generated.")
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(content.strip())
+            print(f"✅ Generated: {path}")
+        except Exception as e:
+            print(f"❌ Failed to write {path}: {e}")
+
+    print("\n✨ UI logic complete. Proceed to script 6 for the build.")
 
 if __name__ == "__main__":
     generate_kotlin_ui()
