@@ -1,26 +1,34 @@
 import os
 
-def generate_resources():
-    manifest = """<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+def generate_manifest_and_res():
+    manifest_path = "app/src/main/AndroidManifest.xml"
+    res_dir = "app/src/main/res"
+    
+    # 1. Generate AndroidManifest.xml
+    manifest_content = """<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.watermarker">
 
-    <application 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    
+    <application
         android:name=".WaterMarkerApp"
-        android:label="WaterMarker" 
-        android:theme="@style/Theme.WaterMarker"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.WaterMarker">
         
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-7732503595590477~5528698466"/>
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
 
-        <activity 
-            android:name="com.watermarker.MainActivity" 
+        <activity
+            android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:theme="@style/Theme.WaterMarker">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -30,32 +38,32 @@ def generate_resources():
 </manifest>
 """
 
-    colors = """<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-</resources>"""
+    # 2. Generate basic string resources
+    strings_content = """<resources>
+    <string name="app_name">WaterMaker</string>
+</resources>
+"""
 
-    themes = """<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.WaterMarker" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">#38BDF8</item>
-        <item name="android:statusBarColor">#020617</item>
+    # 3. Generate basic theme resource
+    themes_content = """<resources>
+    <style name="Theme.WaterMarker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#38BDF8</item>
     </style>
-</resources>"""
+</resources>
+"""
 
     files = {
-        "app/src/main/AndroidManifest.xml": manifest.strip(),
-        "app/src/main/res/values/colors.xml": colors.strip(),
-        "app/src/main/res/values/themes.xml": themes.strip()
+        manifest_path: manifest_content.strip(),
+        f"{res_dir}/values/strings.xml": strings_content.strip(),
+        f"{res_dir}/values/themes.xml": themes_content.strip(),
     }
 
+    print("📄 Generating fixed AndroidManifest.xml with AdMob IDs and App Registration...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Manifest linked to Application Class.")
+    print("✅ Manifest setup complete.")
 
 if __name__ == "__main__":
-    generate_resources()
+    generate_manifest_and_res()
