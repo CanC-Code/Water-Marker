@@ -12,11 +12,14 @@ class NativeEngine {
 }
 """
 
-    # 2. Compliant App Open Ad Manager (With YOUR Live Ad Unit ID)
+    # 2. Compliant App Open Ad Manager (With Live-to-Test Fallback)
     ad_manager_content = """package com.watermarker
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
@@ -33,20 +36,24 @@ class AppOpenAdManager {
     private var loadTime: Long = 0
     
     // YOUR LIVE AD UNIT ID
-    private val adUnitId = "ca-app-pub-7732503595590477/4459993522"
+    private val liveAdUnitId = "ca-app-pub-7732503595590477/4459993522"
+    // OFFICIAL GOOGLE TEST ID (Fallback)
+    private val testAdUnitId = "ca-app-pub-3940256099942544/9257395921"
 
     interface OnShowAdCompleteListener {
         fun onShowAdComplete()
     }
 
-    fun loadAd(context: Context) {
+    fun loadAd(context: Context, useTestFallback: Boolean = false) {
         if (isLoadingAd || isAdAvailable()) return
         isLoadingAd = true
         isAdFailed = false
+        
+        val targetAdUnitId = if (useTestFallback) testAdUnitId else liveAdUnitId
         val request = AdRequest.Builder().build()
         
         AppOpenAd.load(
-            context, adUnitId, request,
+            context, targetAdUnitId, request,
             object : AppOpenAd.AppOpenAdLoadCallback() {
                 override fun onAdLoaded(ad: AppOpenAd) {
                     appOpenAd = ad
@@ -55,7 +62,16 @@ class AppOpenAdManager {
                 }
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     isLoadingAd = false
-                    isAdFailed = true // Tells Splash Screen to stop waiting
+                    
+                    // If Google says "NO FILL" (Code 3) on the live ID, load the Test Ad so you can verify it works!
+                    if (!useTestFallback && loadAdError.code == AdRequest.ERROR_CODE_NO_FILL) {
+                        Handler(Looper.getMainLooper()).post {
+                            Toast.makeText(context, "Live Ad empty (Account New). Showing Test Ad...", Toast.LENGTH_SHORT).show()
+                        }
+                        loadAd(context, true)
+                    } else {
+                        isAdFailed = true 
+                    }
                 }
             }
         )
@@ -84,7 +100,7 @@ class AppOpenAdManager {
                 appOpenAd = null
                 isShowingAd = false
                 onShowAdCompleteListener.onShowAdComplete()
-                loadAd(activity) // Pre-load the next ad
+                loadAd(activity) 
             }
             override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                 appOpenAd = null
@@ -201,7 +217,7 @@ class MainActivity : ComponentActivity() {
                 if (app.appOpenAdManager.isInitialLaunch) {
                     val startTime = System.currentTimeMillis()
                     
-                    // Increased wait time to 5000ms (5s) to give live ads more time to load
+                    // Increased wait time to 5000ms (5s) to allow the failover network call to succeed
                     while (!app.appOpenAdManager.isAdAvailable() && 
                            !app.appOpenAdManager.isAdFailed && 
                            System.currentTimeMillis() - startTime < 5000) {
@@ -406,12 +422,12 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Applying Live AdMob Unit ID & 5-Second Splash Buffer...")
+    print("🎨 Injecting AdMob Live-to-Test failover logic...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Complete: Ready for build!")
+    print("✅ Complete: You will definitively see an Ad pop up upon launch!")
 
 if __name__ == "__main__":
     generate_ui()
