@@ -24,12 +24,13 @@ plugins {
 android {
     namespace 'com.watermarker'
     compileSdk 35
+
     defaultConfig {
         applicationId "com.watermarker"
         minSdk 24
         targetSdk 35
-        versionCode 5
-        versionName "1.4"
+        versionCode 6
+        versionName "1.5"
         externalNativeBuild { cmake { cppFlags "" } }
     }
     buildFeatures { compose true }
@@ -70,7 +71,7 @@ org.gradle.jvmargs=-Xmx2048m
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Gradle configuration updated to API 35.")
+    print("✅ Gradle configuration complete (SDK 35).")
 
 if __name__ == "__main__":
     generate_gradle_files()
