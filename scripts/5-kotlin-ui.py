@@ -125,7 +125,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var isDarkMode by remember { mutableStateOf(isSystemInDarkTheme()) }
+            // FIX: Evaluate theme outside the remember block
+            val systemDark = isSystemInDarkTheme()
+            var isDarkMode by remember { mutableStateOf(systemDark) }
+            
             MaterialTheme(colorScheme = if (isDarkMode) darkColorScheme() else lightColorScheme()) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     var showMenu by remember { mutableStateOf(false) }
@@ -255,7 +258,6 @@ class MainActivity : ComponentActivity() {
                                                 
                                                 val outputPath = File(context.cacheDir, "final.${outputFormat.lowercase()}").absolutePath
                                                 
-                                                // Prevent crashes if C++ engine throws Fatal exception
                                                 val success = try {
                                                     nativeEngine.processWatermark(basePath, overlayPath, outputPath, exportQuality.toInt())
                                                 } catch (t: Throwable) {
@@ -313,7 +315,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) { null }
     }
 
-    // EXPORT TO USER'S PHOTO GALLERY
     private fun saveToGallery(context: Context, file: File, fileName: String): Uri? {
         val values = android.content.ContentValues().apply {
             put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -351,7 +352,7 @@ class MainActivity : ComponentActivity() {
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Generating UI with Crash-Proof Native Wrapper and Gallery Export...")
+    print("🎨 Generating UI with corrected Theme evaluation state...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
