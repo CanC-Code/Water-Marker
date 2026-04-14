@@ -36,9 +36,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,12 +58,13 @@ fun WaterMarkerUI() {
     var baseBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var activeOverlay by remember { mutableStateOf<Bitmap?>(null) }
     
+    // UI State
+    var fileName by remember { mutableStateOf("MyWatermark") }
     var overlayX by remember { mutableStateOf(0f) }
     var overlayY by remember { mutableStateOf(0f) }
-    var overlayScale by remember { mutableStateOf(0.5f) }
+    var overlayScale by remember { mutableStateOf(1f) }
     var overlayRotation by remember { mutableStateOf(0f) }
-    var baseRotation by remember { mutableStateOf(0f) }
-    var opacity by remember { mutableStateOf(0.8f) }
+    var opacity by remember { mutableStateOf(1.0f) }
     var isSaving by remember { mutableStateOf(false) }
 
     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -74,63 +75,89 @@ fun WaterMarkerUI() {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF020617))) {
+        // Toolbar
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Button(onClick = { basePicker.launch("image/*") }) { Text("LOAD IMAGE", fontSize = 10.sp) }
-            Button(onClick = { overlayPicker.launch("image/*") }) { Text("LOAD OVERLAY", fontSize = 10.sp) }
-            IconButton(onClick = { baseRotation = (baseRotation + 90f) % 360f }) {
-                Icon(Icons.Default.Refresh, "Rotate", tint = Color.White)
-            }
+            Button(onClick = { overlayPicker.launch("image/*") }) { Text("OVERLAY", fontSize = 10.sp) }
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, rot ->
-                    overlayX += pan.x
-                    overlayY += pan.y
-                    overlayScale *= zoom
-                    overlayRotation += rot
-                }
-            }
-        ) {
+        // The Workspace Canvas
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth().background(Color.Black).clipToBounds()) {
+            val constraints = this
             baseBitmap?.let { base ->
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val canvasWidth = size.width
-                    val canvasHeight = size.height
-                    
-                    drawContext.canvas.save()
-                    drawContext.canvas.translate(canvasWidth / 2f, canvasHeight / 2f)
-                    drawContext.canvas.rotate(baseRotation)
-                    drawImage(base.asImageBitmap(), dstOffset = androidx.compose.ui.unit.IntOffset(-(base.width/2), -(base.height/2)))
-                    drawContext.canvas.restore()
+                // Calculate "Fit" Scale
+                val canvasRatio = constraints.maxWidth / constraints.maxHeight
+                val imageRatio = base.width.toFloat() / base.height.toFloat()
+                
+                val fitScale = if (imageRatio > canvasRatio) {
+                    constraints.maxWidth.value / base.width.toFloat()
+                } else {
+                    constraints.maxHeight.value / base.height.toFloat()
+                }
 
+                Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, rot ->
+                        overlayX += pan.x / fitScale
+                        overlayY += pan.y / fitScale
+                        overlayScale *= zoom
+                        overlayRotation += rot
+                    }
+                }) {
+                    drawContext.canvas.save()
+                    drawContext.canvas.translate(size.width / 2f, size.height / 2f)
+                    drawContext.canvas.scale(fitScale, fitScale)
+
+                    // Draw the Base (Original Image)
+                    drawImage(base.asImageBitmap(), dstOffset = IntOffset(-base.width / 2, -base.height / 2))
+
+                    // Draw Overlay relative to Base center
                     activeOverlay?.let { over ->
                         drawContext.canvas.save()
-                        drawContext.canvas.translate(canvasWidth / 2f + overlayX, canvasHeight / 2f + overlayY)
+                        drawContext.canvas.translate(overlayX, overlayY)
                         drawContext.canvas.rotate(overlayRotation)
                         drawContext.canvas.scale(overlayScale, overlayScale)
-                        drawImage(over.asImageBitmap(), alpha = opacity, dstOffset = androidx.compose.ui.unit.IntOffset(-(over.width/2), -(over.height/2)))
+                        drawImage(
+                            over.asImageBitmap(), 
+                            alpha = opacity,
+                            dstOffset = IntOffset(-over.width / 2, -over.height / 2)
+                        )
                         drawContext.canvas.restore()
                     }
+                    drawContext.canvas.restore()
                 }
             }
         }
 
-        Column(modifier = Modifier.background(Color(0xFF0F172A)).padding(16.dp)) {
-            Slider(value = opacity, onValueChange = { opacity = it })
-            Button(
-                onClick = {
-                    if (baseBitmap != null && activeOverlay != null) {
-                        scope.launch {
-                            isSaving = true
-                            saveFullResolution(context, baseBitmap!!, activeOverlay!!, overlayX, overlayY, overlayScale, overlayRotation, opacity, baseRotation)
-                            isSaving = false
+        // QOL Footer
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    label = { Text("Filename") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White, focusedTextColor = Color.White)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Opacity: ${(opacity * 100).toInt()}%", color = Color.White)
+                Slider(value = opacity, onValueChange = { opacity = it })
+                
+                Button(
+                    onClick = {
+                        if (baseBitmap != null && activeOverlay != null) {
+                            scope.launch {
+                                isSaving = true
+                                saveLossless(context, baseBitmap!!, activeOverlay!!, overlayX, overlayY, overlayScale, overlayRotation, opacity, fileName)
+                                isSaving = false
+                            }
                         }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))
-            ) {
-                Text(if (isSaving) "SAVING..." else "SAVE WATERMARKED IMAGE")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))
+                ) {
+                    Text(if (isSaving) "COMPRESSING..." else "EXPORT LOSSLESS IMAGE")
+                }
             }
         }
     }
@@ -138,18 +165,32 @@ fun WaterMarkerUI() {
 
 fun decodeUri(context: Context, uri: Uri): Bitmap? {
     return try {
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+        context.contentResolver.openInputStream(uri)?.use { 
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inMutable = true })
+        }
     } catch (e: Exception) { null }
 }
 
-suspend fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, s: Float, r: Float, a: Float, br: Float) {
+suspend fun saveLossless(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, s: Float, r: Float, a: Float, name: String) {
     withContext(Dispatchers.IO) {
+        // Pixel Matching logic: create a bitmap of exact dimensions as original
         val result = base.copy(Bitmap.Config.ARGB_8888, true)
-        NativeEngine().blendImages(result, overlay, x, y, s, r, a)
+        val canvas = Canvas(result)
+        val paint = Paint().apply { alpha = (a * 255).toInt() }
         
+        val matrix = Matrix()
+        // Aligning coordinates to match the Canvas logic exactly
+        matrix.postTranslate(-overlay.width / 2f, -overlay.height / 2f)
+        matrix.postScale(s, s)
+        matrix.postRotate(r)
+        matrix.postTranslate(base.width / 2f + x, base.height / 2f + y)
+        
+        canvas.drawBitmap(overlay, matrix, paint)
+
+        val cleanName = name.replace("[^a-zA-Z0-9]".toRegex(), "_")
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "WM_${System.currentTimeMillis()}.png")
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "$cleanName.webp")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/webp")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WaterMarker")
             }
@@ -158,10 +199,17 @@ suspend fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, 
         val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
         uri?.let {
             context.contentResolver.openOutputStream(it)?.use { stream ->
-                result.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                // 2026 Strategy: WEBP_LOSSLESS for max size reduction with 0 quality loss
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    result.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, stream)
+                } else {
+                    result.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                }
             }
         }
-        withContext(Dispatchers.Main) { Toast.makeText(context, "Saved to Gallery", Toast.LENGTH_SHORT).show() }
+        withContext(Dispatchers.Main) { 
+            Toast.makeText(context, "Metadata Stripped & Saved to Gallery", Toast.LENGTH_LONG).show() 
+        }
     }
 }
 """
@@ -176,7 +224,7 @@ suspend fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, 
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Kotlin UI with Canvas and gestures updated.")
+    print("✅ Logic Updated: Fit-to-screen, Metadata stripping, and WebP Lossless enabled.")
 
 if __name__ == "__main__":
     generate_ui()
