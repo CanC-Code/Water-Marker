@@ -1,25 +1,14 @@
 import os
 
 def generate_ui():
-    # 1. The Native Engine Bridge
     engine_content = """package com.watermarker
 import android.graphics.Bitmap
-
 class NativeEngine {
-    companion object {
-        init {
-            try {
-                System.loadLibrary("watermarker")
-            } catch (e: Exception) {
-                // Logic Fix: Prevents crash if library fails to load
-            }
-        }
-    }
+    companion object { init { System.loadLibrary("watermarker") } }
     external fun blendImages(base: Bitmap, overlay: Bitmap, x: Float, y: Float, scale: Float, rotation: Float, opacity: Float)
 }
 """
 
-    # 2. The Main UI Logic
     main_activity_content = """package com.watermarker
 
 import android.content.ContentValues
@@ -65,11 +54,7 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { 
-            Surface(color = MaterialTheme.colorScheme.background) {
-                WaterMarkerUI() 
-            }
-        }
+        setContent { WaterMarkerUI() }
     }
 }
 
@@ -108,7 +93,6 @@ fun WaterMarkerUI() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF020617))) {
-            // 1. Overlay Selection
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("1. SELECT OVERLAY", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
@@ -131,7 +115,6 @@ fun WaterMarkerUI() {
                 }
             }
 
-            // 2. Subject Controls
             Row(modifier = Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("2. SUBJECT IMAGE", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -144,7 +127,6 @@ fun WaterMarkerUI() {
                 }
             }
 
-            // 3. Workspace (Canvas)
             Box(modifier = Modifier.weight(1f).fillMaxWidth().background(Color.Black).clipToBounds()
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, rot ->
@@ -163,11 +145,9 @@ fun WaterMarkerUI() {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val canvasWidth = size.width
                         val canvasHeight = size.height
-                        
                         val isPortrait = (baseRotation / 90f) % 2 != 0f
                         val bw = if (isPortrait) base.height else base.width
                         val bh = if (isPortrait) base.width else base.height
-                        
                         val drawScale = minOf(canvasWidth / bw, canvasHeight / bh)
                         val offsetX = (canvasWidth - bw * drawScale) / 2
                         val offsetY = (canvasHeight - bh * drawScale) / 2
@@ -175,7 +155,6 @@ fun WaterMarkerUI() {
                         drawContext.canvas.save()
                         drawContext.canvas.translate(canvasWidth / 2f, canvasHeight / 2f)
                         drawContext.canvas.rotate(baseRotation)
-                        
                         drawImage(
                             base.asImageBitmap(), 
                             dstOffset = androidx.compose.ui.unit.IntOffset(-(base.width * drawScale / 2).toInt(), -(base.height * drawScale / 2).toInt()), 
@@ -187,11 +166,9 @@ fun WaterMarkerUI() {
                             val targetOw = base.width * scale
                             val aspect = over.height.toFloat() / over.width
                             val targetOh = targetOw * aspect
-
                             drawContext.canvas.save()
                             drawContext.canvas.translate(offsetX + x * drawScale, offsetY + y * drawScale)
                             drawContext.canvas.rotate(rotation)
-                            
                             drawImage(
                                 over.asImageBitmap(),
                                 dstOffset = androidx.compose.ui.unit.IntOffset(-(targetOw * drawScale / 2).toInt(), -(targetOh * drawScale / 2).toInt()),
@@ -204,14 +181,8 @@ fun WaterMarkerUI() {
                 }
             }
 
-            // 4. Footer Controls
             Column(modifier = Modifier.background(Color(0xFF0F172A)).padding(16.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Overlay Opacity", color = Color(0xFF94A3B8), fontSize = 11.sp)
-                    Text("${(opacity * 100).toInt()}%", color = Color(0xFF38BDF8), fontSize = 11.sp)
-                }
                 Slider(value = opacity, onValueChange = { opacity = it }, colors = SliderDefaults.colors(thumbColor = Color(0xFF38BDF8)))
-                
                 Button(
                     onClick = {
                         if (baseBitmap != null && activeOverlay != null) {
@@ -220,22 +191,13 @@ fun WaterMarkerUI() {
                                 saveFullResolution(context, baseBitmap!!, activeOverlay!!, x, y, scale, rotation, opacity, baseRotation)
                                 isSaving = false
                             }
-                        } else {
-                            Toast.makeText(context, "Select images first", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))
                 ) {
-                    Text(if (isSaving) "SAVING..." else "SAVE FULL RESOLUTION", color = Color(0xFF020617), fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
+                    Text(if (isSaving) "SAVING..." else "SAVE WATERMARKED IMAGE")
                 }
-            }
-        }
-
-        if (isSaving) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF38BDF8))
             }
         }
     }
@@ -257,9 +219,7 @@ suspend fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, 
         } else {
             base.copy(Bitmap.Config.ARGB_8888, true)
         }
-
         NativeEngine().blendImages(finalBase, overlay, x, y, scale, rotation, opacity)
-
         val filename = "WM_${System.currentTimeMillis()}.png"
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
@@ -268,37 +228,28 @@ suspend fun saveFullResolution(context: Context, base: Bitmap, overlay: Bitmap, 
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/WaterMarker")
             }
         }
-
         val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
         uri?.let {
             context.contentResolver.openOutputStream(it)?.use { stream ->
                 finalBase.compress(Bitmap.CompressFormat.PNG, 100, stream)
             }
         }
-        
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Saved to Gallery", Toast.LENGTH_SHORT).show()
-        }
+        withContext(Dispatchers.Main) { Toast.makeText(context, "Saved to Gallery", Toast.LENGTH_SHORT).show() }
     }
 }
 """
 
-    # Writing files to the project structure
     package_path = "app/src/main/java/com/watermarker"
-    
     files = {
         f"{package_path}/NativeEngine.kt": engine_content.strip(),
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🚀 Generating Kotlin UI and Native Bridge...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-        print(f"  Generated: {path}")
-
-    print("✅ Kotlin UI complete.")
+    print("✅ Kotlin UI Updated.")
 
 if __name__ == "__main__":
     generate_ui()
