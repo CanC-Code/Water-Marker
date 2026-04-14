@@ -109,6 +109,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.*
@@ -153,7 +156,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Dynamic Theme State
             val systemDark = isSystemInDarkTheme()
             var isDarkMode by remember { mutableStateOf(systemDark) }
             val colorScheme = if (isDarkMode) darkColorScheme() else lightColorScheme()
@@ -172,15 +174,14 @@ class MainActivity : ComponentActivity() {
                     var exportQuality by remember { mutableStateOf(100f) }
                     var outputFormat by remember { mutableStateOf("JPEG") }
                     
-                    // Base Image State
                     var baseRotation by remember { mutableStateOf(0f) }
-
-                    // Overlay Transform States
                     var overlayOffset by remember { mutableStateOf(Offset.Zero) }
                     var overlayScale by remember { mutableStateOf(1f) }
                     var overlayRotation by remember { mutableStateOf(0f) }
                     
                     val context = LocalContext.current
+                    val coroutineScope = rememberCoroutineScope() // Added Coroutine Scope for background work
+                    
                     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> 
                         baseImageUri = uri 
                         baseRotation = 0f
@@ -249,12 +250,9 @@ class MainActivity : ComponentActivity() {
                                                 val tempFile = File(context.cacheDir, "text_overlay.png")
                                                 FileOutputStream(tempFile).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
                                                 overlayImageUri = Uri.fromFile(tempFile)
-                                                
-                                                // Reset overlay transforms for new text
                                                 overlayOffset = Offset.Zero
                                                 overlayScale = 1f
                                                 overlayRotation = 0f
-                                                
                                                 Toast.makeText(context, "Text overlay generated!", Toast.LENGTH_SHORT).show()
                                             }
                                         }) { Text("Apply Text Overlay") }
@@ -262,12 +260,11 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // --- PREVIEW CANVAS WORK AREA ---
                             val canvasBgColor = if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFE0E0E0)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(1f) // Takes up remaining middle space
+                                    .weight(1f)
                                     .background(canvasBgColor) 
                                     .clipToBounds()
                             ) {
@@ -280,7 +277,7 @@ class MainActivity : ComponentActivity() {
                                         contentDescription = "Base Image",
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .rotate(baseRotation), // Rotate base image
+                                            .rotate(baseRotation),
                                         contentScale = ContentScale.Fit
                                     )
                                 } else {
@@ -296,8 +293,10 @@ class MainActivity : ComponentActivity() {
                                         bitmap = overlayBitmap,
                                         contentDescription = "Overlay Image",
                                         modifier = Modifier
-                                            .offset { IntOffset(overlayOffset.x.roundToInt(), overlayOffset.y.roundToInt()) }
+                                            // FIX: Move all transformations into a single graphicsLayer for smooth interaction
                                             .graphicsLayer(
+                                                translationX = overlayOffset.x,
+                                                translationY = overlayOffset.y,
                                                 scaleX = overlayScale,
                                                 scaleY = overlayScale,
                                                 rotationZ = overlayRotation
@@ -305,7 +304,7 @@ class MainActivity : ComponentActivity() {
                                             .pointerInput(Unit) {
                                                 detectTransformGestures { _, pan, zoom, rotation ->
                                                     overlayOffset += pan
-                                                    overlayScale = (overlayScale * zoom).coerceIn(0.1f, 10f) // Allow scaling from 10% to 1000%
+                                                    overlayScale = (overlayScale * zoom).coerceIn(0.1f, 10f)
                                                     overlayRotation += rotation
                                                 }
                                             }
@@ -313,7 +312,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             
-                            // Base Image Controls
                             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                                 OutlinedButton(
                                     onClick = { baseRotation += 90f },
@@ -338,8 +336,34 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // FIX: Actually execute the C++ engine!
                             Button(
-                                onClick = { Toast.makeText(context, "Ready for Native Engine...", Toast.LENGTH_SHORT).show() },
+                                onClick = { 
+                                    if (baseImageUri != null && overlayImageUri != null) {
+                                        Toast.makeText(context, "Processing with Native Engine...", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            // 1. Save out the files so C++ can read absolute paths
+                                            val basePath = prepareBaseImage(context, baseImageUri!!, baseRotation, "temp_base.img")
+                                            val overlayPath = uriToFile(context, overlayImageUri!!, "temp_overlay.img")
+                                            val outputPath = File(context.cacheDir, "final_watermark.${outputFormat.lowercase()}").absolutePath
+                                            
+                                            // 2. Call C++ Code
+                                            if (basePath != null && overlayPath != null) {
+                                                val success = nativeEngine.processWatermark(basePath, overlayPath, outputPath, exportQuality.toInt())
+                                                withContext(Dispatchers.Main) {
+                                                    if (success) {
+                                                        Toast.makeText(context, "✅ Success! Saved to: $outputPath", Toast.LENGTH_LONG).show()
+                                                    } else {
+                                                        Toast.makeText(context, "❌ Native Engine failed.", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Load a Base and Overlay image first!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth().height(50.dp)
                             ) { Text("PROCESS WATERMARK") }
                         }
@@ -349,11 +373,43 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    // --- HELPER FUNCTIONS ---
+    
     private fun loadBitmapFromUri(context: Context, uri: Uri?): ImageBitmap? {
         if (uri == null) return null
         return try {
             val stream = context.contentResolver.openInputStream(uri)
             BitmapFactory.decodeStream(stream)?.asImageBitmap()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Resolves base image rotation and saves out a temp file for C++
+    private fun prepareBaseImage(context: Context, uri: Uri, rotation: Float, fileName: String): String? {
+        return try {
+            val stream = context.contentResolver.openInputStream(uri)
+            val bitmap = BitmapFactory.decodeStream(stream) ?: return null
+            
+            val matrix = Matrix().apply { postRotate(rotation) }
+            val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            
+            val tempFile = File(context.cacheDir, fileName)
+            FileOutputStream(tempFile).use { out -> rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out) }
+            tempFile.absolutePath
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Copies raw overlay content into the cache so C++ can read it
+    private fun uriToFile(context: Context, uri: Uri, fileName: String): String? {
+        if (uri.scheme == "file") return uri.path // Already a file
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val tempFile = File(context.cacheDir, fileName)
+            FileOutputStream(tempFile).use { out -> inputStream?.copyTo(out) }
+            tempFile.absolutePath
         } catch (e: Exception) {
             null
         }
@@ -386,12 +442,12 @@ class MainActivity : ComponentActivity() {
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Generating UI with Free Overlay Transform, Base Rotation, and Dark Mode...")
+    print("🎨 Generating UI with Smooth Transformations and C++ Execution...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Complete: Rebuild your project to test the new controls!")
+    print("✅ Complete: Your button will now execute the watermark and your gestures will be buttery smooth!")
 
 if __name__ == "__main__":
     generate_ui()
