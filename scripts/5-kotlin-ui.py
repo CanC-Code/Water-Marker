@@ -12,7 +12,7 @@ class NativeEngine {
 }
 """
 
-    # 2. Compliant App Open Ad Manager (With Fail-Fast Logic & Test ID)
+    # 2. Compliant App Open Ad Manager (With YOUR Live Ad Unit ID)
     ad_manager_content = """package com.watermarker
 
 import android.app.Activity
@@ -28,13 +28,12 @@ class AppOpenAdManager {
     private var appOpenAd: AppOpenAd? = null
     private var isLoadingAd = false
     var isShowingAd = false
-    var isAdFailed = false // <-- Added to allow the splash screen to fail-fast
+    var isAdFailed = false
     var isInitialLaunch = true 
     private var loadTime: Long = 0
     
-    // IMPORTANT: Official Google Test Ad ID for App Open Ads.
-    // Replace with "ca-app-pub-7732503595590477/4459993522" ONLY when publishing to the Play Store.
-    private val adUnitId = "ca-app-pub-3940256099942544/9257395921"
+    // YOUR LIVE AD UNIT ID
+    private val adUnitId = "ca-app-pub-7732503595590477/4459993522"
 
     interface OnShowAdCompleteListener {
         fun onShowAdComplete()
@@ -56,7 +55,7 @@ class AppOpenAdManager {
                 }
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     isLoadingAd = false
-                    isAdFailed = true // <-- Tells Splash Screen to stop waiting
+                    isAdFailed = true // Tells Splash Screen to stop waiting
                 }
             }
         )
@@ -202,10 +201,10 @@ class MainActivity : ComponentActivity() {
                 if (app.appOpenAdManager.isInitialLaunch) {
                     val startTime = System.currentTimeMillis()
                     
-                    // Logic Fix: Wait UNLESS the ad explicitly fails or succeeds
+                    // Increased wait time to 5000ms (5s) to give live ads more time to load
                     while (!app.appOpenAdManager.isAdAvailable() && 
                            !app.appOpenAdManager.isAdFailed && 
-                           System.currentTimeMillis() - startTime < 3000) {
+                           System.currentTimeMillis() - startTime < 5000) {
                         delay(100)
                     }
                     
@@ -407,7 +406,7 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Applying Final Fixes: Splash Screen Fast-Fail & Canvas Rendering...")
+    print("🎨 Applying Live AdMob Unit ID & 5-Second Splash Buffer...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
