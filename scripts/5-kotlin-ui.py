@@ -62,13 +62,14 @@ fun WaterMarkerUI() {
     
     // UI & Transformation State
     var fileName by remember { mutableStateOf("MyWatermark") }
-    var outputFormat by remember { mutableStateOf("PNG") }
+    var outputFormat by remember { mutableStateOf("JPG") }
     var overlayX by remember { mutableStateOf(0f) }
     var overlayY by remember { mutableStateOf(0f) }
     var overlayScale by remember { mutableStateOf(1f) }
     var overlayRotation by remember { mutableStateOf(0f) }
     var baseRotation by remember { mutableStateOf(0f) }
     var opacity by remember { mutableStateOf(1.0f) }
+    var exportQuality by remember { mutableStateOf(0.9f) } // 90% quality default
     var isSaving by remember { mutableStateOf(false) }
 
     val formats = listOf("PNG", "JPG", "WEBP")
@@ -76,7 +77,7 @@ fun WaterMarkerUI() {
     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { 
             baseBitmap = decodeUri(context, it)
-            baseRotation = 0f // Reset rotation on new image
+            baseRotation = 0f 
         }
     }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -113,7 +114,6 @@ fun WaterMarkerUI() {
                 val constraints = this
                 baseBitmap?.let { base ->
                     
-                    // Account for rotation when calculating fit-to-screen
                     val isPortrait = (baseRotation / 90f) % 2 != 0f
                     val bw = if (isPortrait) base.height else base.width
                     val bh = if (isPortrait) base.width else base.height
@@ -139,13 +139,11 @@ fun WaterMarkerUI() {
                         drawContext.canvas.translate(size.width / 2f, size.height / 2f)
                         drawContext.canvas.scale(fitScale, fitScale)
 
-                        // Draw the Base (Subject) Image with rotation
                         drawContext.canvas.save()
                         drawContext.canvas.rotate(baseRotation)
                         drawImage(base.asImageBitmap(), dstOffset = IntOffset(-base.width / 2, -base.height / 2))
                         drawContext.canvas.restore()
 
-                        // Draw Overlay relative to Base center
                         activeOverlay?.let { over ->
                             drawContext.canvas.save()
                             drawContext.canvas.translate(overlayX, overlayY)
@@ -173,7 +171,6 @@ fun WaterMarkerUI() {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     
-                    // Filename Input
                     OutlinedTextField(
                         value = fileName,
                         onValueChange = { fileName = it },
@@ -190,7 +187,6 @@ fun WaterMarkerUI() {
                     
                     Spacer(Modifier.height(8.dp))
                     
-                    // Format Selector
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Format:", color = Color.White, fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -208,22 +204,32 @@ fun WaterMarkerUI() {
                         }
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(4.dp))
                     
-                    // Opacity Slider
+                    // Compression & Opacity Sliders
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Opacity", color = Color.Gray)
-                        Text("${(opacity * 100).toInt()}%", color = Color(0xFF38BDF8))
+                        Text(if (outputFormat == "PNG") "PNG is Lossless" else "Export Quality", color = Color.Gray, fontSize = 12.sp)
+                        Text(if (outputFormat == "PNG") "100%" else "${(exportQuality * 100).toInt()}%", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                    }
+                    Slider(
+                        value = exportQuality, 
+                        onValueChange = { exportQuality = it }, 
+                        enabled = outputFormat != "PNG",
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFF38BDF8), activeTrackColor = Color(0xFF38BDF8))
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Overlay Opacity", color = Color.Gray, fontSize = 12.sp)
+                        Text("${(opacity * 100).toInt()}%", color = Color(0xFF38BDF8), fontSize = 12.sp)
                     }
                     Slider(value = opacity, onValueChange = { opacity = it }, colors = SliderDefaults.colors(thumbColor = Color(0xFF38BDF8), activeTrackColor = Color(0xFF38BDF8)))
                     
-                    // Save Button
                     Button(
                         onClick = {
                             if (baseBitmap != null && activeOverlay != null) {
                                 scope.launch {
                                     isSaving = true
-                                    val success = saveCustomFormat(context, baseBitmap!!, activeOverlay!!, overlayX, overlayY, overlayScale, overlayRotation, opacity, baseRotation, fileName, outputFormat)
+                                    val success = saveCustomFormat(context, baseBitmap!!, activeOverlay!!, overlayX, overlayY, overlayScale, overlayRotation, opacity, baseRotation, fileName, outputFormat, exportQuality)
                                     isSaving = false
                                     
                                     if(success) {
@@ -255,19 +261,16 @@ fun decodeUri(context: Context, uri: Uri): Bitmap? {
     } catch (e: Exception) { null }
 }
 
-suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, s: Float, r: Float, a: Float, baseRot: Float, name: String, format: String): Boolean {
+suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, s: Float, r: Float, a: Float, baseRot: Float, name: String, format: String, quality: Float): Boolean {
     return withContext(Dispatchers.IO) {
         try {
-            // 1. Handle Source Rotation
             val matrixBase = Matrix()
             matrixBase.postRotate(baseRot)
             val finalBase = Bitmap.createBitmap(base, 0, 0, base.width, base.height, matrixBase, true)
 
-            // 2. Prepare the Canvas
             val result = finalBase.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(result)
             
-            // JPG Fix: Draw white background to replace alpha transparency
             if (format == "JPG") {
                 canvas.drawColor(android.graphics.Color.WHITE)
                 canvas.drawBitmap(finalBase, 0f, 0f, null)
@@ -278,7 +281,6 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
                 isFilterBitmap = true 
             }
             
-            // 3. Align the Overlay correctly
             val matrixOverlay = Matrix()
             matrixOverlay.postTranslate(-overlay.width / 2f, -overlay.height / 2f)
             matrixOverlay.postScale(s, s)
@@ -287,15 +289,22 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
             
             canvas.drawBitmap(overlay, matrixOverlay, paint)
 
-            // 4. File Setup
             val cleanName = name.replace("[^a-zA-Z0-9]".toRegex(), "_")
             val ext = format.lowercase()
             val mime = "image/${if (ext == "jpg") "jpeg" else ext}"
+            val qualityInt = (quality * 100).toInt()
             
             val compressFormat = when (format) {
                 "JPG" -> Bitmap.CompressFormat.JPEG
                 "PNG" -> Bitmap.CompressFormat.PNG
-                "WEBP" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.WEBP
+                "WEBP" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        if (qualityInt >= 100) Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        Bitmap.CompressFormat.WEBP
+                    }
+                }
                 else -> Bitmap.CompressFormat.PNG
             }
 
@@ -307,11 +316,10 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
                 }
             }
 
-            // 5. Write to Disk
             val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             uri?.let {
                 context.contentResolver.openOutputStream(it)?.use { stream ->
-                    result.compress(compressFormat, 100, stream)
+                    result.compress(compressFormat, qualityInt, stream)
                 }
             }
             true
@@ -328,12 +336,12 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Updating GUI...")
+    print("🎨 Updating GUI for Compression Features...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Studio UI updated: Format selection, Source Rotation, and Snackbars added.")
+    print("✅ Studio UI updated: Export Quality slider integrated.")
 
 if __name__ == "__main__":
     generate_ui()
