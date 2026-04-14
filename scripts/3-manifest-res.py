@@ -8,6 +8,7 @@ def generate_resources():
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application 
+        android:name=".WaterMarkerApp"
         android:label="WaterMarker" 
         android:theme="@style/Theme.WaterMarker"
         android:allowBackup="true">
@@ -18,7 +19,8 @@ def generate_resources():
 
         <activity 
             android:name="com.watermarker.MainActivity" 
-            android:exported="true">
+            android:exported="true"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -28,7 +30,6 @@ def generate_resources():
 </manifest>
 """
 
-    # ... (colors and themes stay the same as previous updates) ...
     colors = """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="purple_500">#FF6200EE</color>
@@ -54,7 +55,7 @@ def generate_resources():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Manifest updated with AdMob App ID.")
+    print("✅ Manifest linked to Application Class.")
 
 if __name__ == "__main__":
     generate_resources()
