@@ -12,7 +12,7 @@ class NativeEngine {
 }
 """
 
-    # 2. Compliant App Open Ad Manager
+    # 2. Compliant App Open Ad Manager (With Callback Support)
     ad_manager_content = """package com.watermarker
 
 import android.app.Activity
@@ -28,10 +28,14 @@ class AppOpenAdManager {
     private var appOpenAd: AppOpenAd? = null
     private var isLoadingAd = false
     var isShowingAd = false
+    var isInitialLaunch = true // Tracks cold starts for Splash Screen logic
     private var loadTime: Long = 0
     
-    // Using your precise Ad Unit ID
     private val adUnitId = "ca-app-pub-7732503595590477/4459993522"
+
+    interface OnShowAdCompleteListener {
+        fun onShowAdComplete()
+    }
 
     fun loadAd(context: Context) {
         if (isLoadingAd || isAdAvailable()) return
@@ -59,14 +63,15 @@ class AppOpenAdManager {
         return dateDifference < (numMilliSecondsPerHour * numHours)
     }
 
-    private fun isAdAvailable(): Boolean {
+    fun isAdAvailable(): Boolean {
         return appOpenAd != null && wasLoadTimeLessThanNHoursAgo(4)
     }
 
-    fun showAdIfAvailable(activity: Activity) {
+    fun showAdIfAvailable(activity: Activity, onShowAdCompleteListener: OnShowAdCompleteListener) {
         if (isShowingAd) return
         if (!isAdAvailable()) {
             loadAd(activity)
+            onShowAdCompleteListener.onShowAdComplete()
             return
         }
 
@@ -74,11 +79,13 @@ class AppOpenAdManager {
             override fun onAdDismissedFullScreenContent() {
                 appOpenAd = null
                 isShowingAd = false
+                onShowAdCompleteListener.onShowAdComplete()
                 loadAd(activity) // Pre-load the next ad
             }
             override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                 appOpenAd = null
                 isShowingAd = false
+                onShowAdCompleteListener.onShowAdComplete()
                 loadAd(activity)
             }
             override fun onAdShowedFullScreenContent() {
@@ -91,7 +98,6 @@ class AppOpenAdManager {
 """
 
     # 3. Application Class (Lifecycle Observer)
-    # FIX APPLIED: Explicitly call super<Application>.onCreate()
     app_class_content = """package com.watermarker
 
 import android.app.Activity
@@ -103,46 +109,47 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.android.gms.ads.MobileAds
 
 class WaterMarkerApp : Application(), Application.ActivityLifecycleCallbacks, DefaultLifecycleObserver {
-    private lateinit var appOpenAdManager: AppOpenAdManager
+    lateinit var appOpenAdManager: AppOpenAdManager
     private var currentActivity: Activity? = null
 
     override fun onCreate() {
-        super<Application>.onCreate() // <-- FIX: Explicit supertype call
+        super<Application>.onCreate() 
         registerActivityLifecycleCallbacks(this)
         MobileAds.initialize(this) {}
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         
         appOpenAdManager = AppOpenAdManager()
+        appOpenAdManager.loadAd(this) // Eagerly load ad the millisecond the app launches
     }
 
     override fun onStart(owner: LifecycleOwner) {
-        super<DefaultLifecycleObserver>.onStart(owner) // <-- FIX: Explicit supertype call
+        super<DefaultLifecycleObserver>.onStart(owner)
         currentActivity?.let {
-            appOpenAdManager.showAdIfAvailable(it)
+            // Only trigger ad via lifecycle if it's NOT the first launch
+            // First launch is handled by the Splash Screen in MainActivity to prevent sudden pop-ups
+            if (!appOpenAdManager.isInitialLaunch) {
+                appOpenAdManager.showAdIfAvailable(it, object : AppOpenAdManager.OnShowAdCompleteListener {
+                    override fun onShowAdComplete() {}
+                })
+            }
         }
     }
 
     override fun onActivityStarted(activity: Activity) {
         if (!appOpenAdManager.isShowingAd) currentActivity = activity
     }
-    
-    override fun onActivityResumed(activity: Activity) {
-        currentActivity = activity
-    }
-    
+    override fun onActivityResumed(activity: Activity) { currentActivity = activity }
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivityPaused(activity: Activity) {}
     override fun onActivityStopped(activity: Activity) {}
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
     override fun onActivityDestroyed(activity: Activity) { 
-        if (currentActivity == activity) {
-            currentActivity = null
-        }
+        if (currentActivity == activity) currentActivity = null 
     }
 }
 """
 
-    # 4. Main UI 
+    # 4. Main UI (With Splash Screen & Corrected Canvas Drawing)
     main_activity_content = """package com.watermarker
 
 import android.content.ContentValues
@@ -174,13 +181,52 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WaterMarkerUI() }
+        
+        val app = application as WaterMarkerApp
+
+        setContent { 
+            var isAppReady by remember { mutableStateOf(false) }
+
+            // SPLASH SCREEN LOGIC: Wait for ad to load on Cold Start
+            LaunchedEffect(Unit) {
+                if (app.appOpenAdManager.isInitialLaunch) {
+                    val startTime = System.currentTimeMillis()
+                    // Wait up to 3 seconds for the ad to download
+                    while (!app.appOpenAdManager.isAdAvailable() && System.currentTimeMillis() - startTime < 3000) {
+                        delay(100)
+                    }
+                    
+                    app.appOpenAdManager.showAdIfAvailable(this@MainActivity, object : AppOpenAdManager.OnShowAdCompleteListener {
+                        override fun onShowAdComplete() {
+                            app.appOpenAdManager.isInitialLaunch = false
+                            isAppReady = true
+                        }
+                    })
+                } else {
+                    isAppReady = true
+                }
+            }
+
+            if (!isAppReady) {
+                // The Visual Splash Screen
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFF020617)), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("PRO OVERLAY STUDIO", color = Color(0xFF38BDF8), fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                }
+            } else {
+                WaterMarkerUI() 
+            }
+        }
     }
 }
 
@@ -208,16 +254,10 @@ fun WaterMarkerUI() {
     val formats = listOf("PNG", "JPG", "WEBP")
 
     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { 
-            baseBitmap = decodeUri(context, it)
-            baseRotation = 0f 
-        }
+        uri?.let { baseBitmap = decodeUri(context, it); baseRotation = 0f }
     }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { 
-            activeOverlay = decodeUri(context, it)
-            overlayX = 0f; overlayY = 0f; overlayScale = 1f; overlayRotation = 0f
-        }
+        uri?.let { activeOverlay = decodeUri(context, it); overlayX = 0f; overlayY = 0f; overlayScale = 1f; overlayRotation = 0f }
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }, containerColor = Color(0xFF020617)) { paddingValues ->
@@ -247,6 +287,7 @@ fun WaterMarkerUI() {
                         drawContext.canvas.save()
                         drawContext.canvas.translate(size.width / 2f, size.height / 2f)
                         drawContext.canvas.scale(fitScale, fitScale)
+                        
                         drawContext.canvas.save()
                         drawContext.canvas.rotate(baseRotation)
                         drawImage(base.asImageBitmap(), dstOffset = IntOffset(-base.width / 2, -base.height / 2))
@@ -315,16 +356,30 @@ fun decodeUri(context: Context, uri: Uri): Bitmap? {
 suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x: Float, y: Float, s: Float, r: Float, a: Float, baseRot: Float, name: String, format: String, quality: Float): Boolean {
     return withContext(Dispatchers.IO) {
         try {
+            // 1. Properly rotate the base image
             val matrixBase = Matrix().apply { postRotate(baseRot) }
             val finalBase = Bitmap.createBitmap(base, 0, 0, base.width, base.height, matrixBase, true)
-            val result = finalBase.copy(Bitmap.Config.ARGB_8888, true)
+            
+            // 2. Create the final drawing canvas (Same size as finalBase)
+            val result = Bitmap.createBitmap(finalBase.width, finalBase.height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(result)
+            
+            // 3. Fill with white ONLY if JPG to prevent transparent areas turning black
             if (format == "JPG") canvas.drawColor(android.graphics.Color.WHITE)
+            
+            // 4. DRAW THE SUBJECT IMAGE (This was missing before!)
+            canvas.drawBitmap(finalBase, 0f, 0f, null)
+
+            // 5. Draw the overlay
             val paint = Paint().apply { alpha = (a * 255).toInt(); isFilterBitmap = true }
             val matrixOverlay = Matrix().apply {
-                postTranslate(-overlay.width / 2f, -overlay.height / 2f); postScale(s, s); postRotate(r); postTranslate(result.width / 2f + x, result.height / 2f + y)
+                postTranslate(-overlay.width / 2f, -overlay.height / 2f)
+                postScale(s, s)
+                postRotate(r)
+                postTranslate(result.width / 2f + x, result.height / 2f + y)
             }
             canvas.drawBitmap(overlay, matrixOverlay, paint)
+            
             val ext = format.lowercase()
             val compressFormat = when (format) {
                 "JPG" -> Bitmap.CompressFormat.JPEG
@@ -352,12 +407,12 @@ suspend fun saveCustomFormat(context: Context, base: Bitmap, overlay: Bitmap, x:
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Updating UI and Ad Manager Logic...")
+    print("🎨 Applying Final Fixes: Splash Screen & Canvas Rendering...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Complete: Explicit supertype calls added to fix Kotlin compilation.")
+    print("✅ Complete: Ready for build!")
 
 if __name__ == "__main__":
     generate_ui()
