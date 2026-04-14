@@ -3,44 +3,36 @@ import subprocess
 import sys
 
 def run_build():
-    # Logic Fix: Get absolute project root to prevent pathing errors
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(script_dir, ".."))
     os.chdir(project_root)
 
-    print("🏗️  Initializing Final Build...")
+    print("🏗️  Starting API 35 Build Sequence...")
     
     try:
-        # 1. Ensure Gradle Wrapper exists (Forcing 8.10.2 for stability)
+        # Check for Gradle Wrapper
         if not os.path.exists("gradlew"):
-            print("📦 Generating stable Gradle 8.10.2 wrapper...")
-            # We use 'gradle' from the system path only once to bootstrap
+            print("📦 Generating Gradle wrapper...")
             subprocess.run(["gradle", "wrapper", "--gradle-version", "8.10.2"], check=True)
         
-        # Ensure the wrapper is executable
         if sys.platform != "win32":
             subprocess.run(["chmod", "+x", "gradlew"], check=True)
         
-        # 2. Execute Clean and Assemble
-        print("🚀 Running: ./gradlew clean assembleDebug --no-daemon")
-        # Logic Fix: Added '--rerun-tasks' to ensure a completely fresh APK signature
-        subprocess.run(["./gradlew", "clean", "assembleDebug", "--no-daemon", "--rerun-tasks"], check=True)
+        # Logic Fix: Use clean to remove the previous API 34 artifacts
+        print("🚀 Executing: ./gradlew clean assembleDebug --no-daemon")
+        subprocess.run(["./gradlew", "clean", "assembleDebug", "--no-daemon"], check=True)
         
-        # 3. Verify Output
+        # Verification
         apk_path = "app/build/outputs/apk/debug/app-debug.apk"
         if os.path.exists(apk_path):
-            print(f"✅ Build Successful!")
-            print(f"📦 APK Location: {os.path.abspath(apk_path)}")
-            print("\n💡 INSTALLATION TIP:")
-            print("If you still get 'App not installed', uninstall the old version")
-            print("using: adb uninstall com.watermarker")
+            print(f"✅ SUCCESS! APK created at: {os.path.abspath(apk_path)}")
         else:
-            print("❌ Error: Build finished but APK was not found at expected path.")
+            print("❌ Build finished but APK was not found. Check logs for resource errors.")
 
     except subprocess.CalledProcessError as e:
-        print(f"❌ Build failed with exit code {e.returncode}")
+        print(f"❌ Gradle build failed (Exit {e.returncode}).")
     except Exception as e:
-        print(f"❌ An unexpected error occurred: {e}")
+        print(f"❌ Unexpected Error: {e}")
 
 if __name__ == "__main__":
     run_build()
