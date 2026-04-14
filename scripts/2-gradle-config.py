@@ -1,28 +1,19 @@
 import os
 
 def generate_gradle_files():
-    # Root build script
     build_gradle = """
 buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
+    repositories { google(); mavenCentral() }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.7.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21"
     }
 }
-
 allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+    repositories { google(); mavenCentral() }
 }
 """
 
-    # App-level build script
     app_gradle = """
 plugins {
     id 'com.android.application'
@@ -32,51 +23,26 @@ plugins {
 
 android {
     namespace 'com.watermarker'
-    # Logic Fix: Must be 35 to support AndroidX 1.15.0+ libraries
     compileSdk 35
-
     defaultConfig {
         applicationId "com.watermarker"
         minSdk 24
-        targetSdk 35 
-        versionCode 5 
+        targetSdk 35
+        versionCode 5
         versionName "1.4"
-        
-        externalNativeBuild {
-            cmake {
-                cppFlags ""
-            }
-        }
+        externalNativeBuild { cmake { cppFlags "" } }
     }
-
-    buildFeatures {
-        compose true
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
-    }
-    
-    kotlinOptions {
-        jvmTarget = "11"
-    }
-
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
+    buildFeatures { compose true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    kotlinOptions { jvmTarget = "11" }
+    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.15.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'androidx.activity:activity-compose:1.9.3'
     implementation platform('androidx.compose:compose-bom:2024.10.01')
     implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.ui:ui-graphics'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
     implementation 'com.google.android.material:material:1.12.0'
 }
@@ -90,7 +56,7 @@ include ':app'
     gradle_properties = """
 android.useAndroidX=true
 android.enableJetifier=true
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+org.gradle.jvmargs=-Xmx2048m
 """
 
     files = {
@@ -104,8 +70,7 @@ org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-            
-    print("✅ Gradle configuration updated to API 35 (Version 5).")
+    print("✅ Gradle configuration updated to API 35.")
 
 if __name__ == "__main__":
     generate_gradle_files()
