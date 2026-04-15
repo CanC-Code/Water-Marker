@@ -10,11 +10,15 @@ def run_build():
     try:
         if not os.path.exists("gradlew"):
             subprocess.run(["gradle", "wrapper", "--gradle-version", "8.10.2"], check=True)
-        
+
+        # Dynamic Gradle command based on the OS
+        gradle_cmd = "gradlew.bat" if sys.platform == "win32" else "./gradlew"
+
         if sys.platform != "win32":
             subprocess.run(["chmod", "+x", "gradlew"], check=True)
-        
-        subprocess.run(["./gradlew", "clean", "assembleDebug", "--no-daemon"], check=True)
+
+        # Execute the correct command
+        subprocess.run([gradle_cmd, "clean", "assembleDebug", "--no-daemon"], check=True)
         print("✅ APK Build Successful!")
 
     except subprocess.CalledProcessError:
