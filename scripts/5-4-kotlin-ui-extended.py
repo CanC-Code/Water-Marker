@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -27,12 +28,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -196,7 +197,8 @@ class MainActivity : ComponentActivity() {
                                         Spacer(modifier = Modifier.width(16.dp))
                                         Box(modifier = Modifier
                                             .size(40.dp)
-                                            .background(overlayTextColor, shape = androidx.compose.foundation.shape.CircleShape)
+                                            .background(overlayTextColor, shape = CircleShape)
+                                            .border(1.dp, Color.Gray, CircleShape)
                                             .clickable { 
                                                 activeColorContext = "text"
                                                 showColorPickerDialog = true 
@@ -210,7 +212,16 @@ class MainActivity : ComponentActivity() {
                                     showTextDialog = false
                                     if (overlayText.isNotEmpty()) {
                                         val bmp = createTextBitmap(overlayText, overlayTextColor.toArgb(), customTypeface, overlayTextBend)
-                                        val tempFile = File(context.cacheDir, "text.png")
+                                        
+                                        // FIX: Erase old cache file to prevent memory bloat
+                                        overlayImageUri?.let { uri ->
+                                            if (uri.path?.contains("cache/text_") == true) {
+                                                File(uri.path!!).delete()
+                                            }
+                                        }
+
+                                        // FIX: Unique timestamp guarantees Compose will redraw the UI layer
+                                        val tempFile = File(context.cacheDir, "text_${System.currentTimeMillis()}.png")
                                         FileOutputStream(tempFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
                                         overlayImageUri = Uri.fromFile(tempFile)
                                     }
@@ -234,7 +245,9 @@ class MainActivity : ComponentActivity() {
                                         IconButton(onClick = {
                                             if (drawPaths.isNotEmpty()) {
                                                 val bmp = createDrawingBitmap(drawPaths, previewWidth.toInt(), previewHeight.toInt())
-                                                val tempFile = File(context.cacheDir, "drawing.png")
+                                                
+                                                // FIX: Timestamp guarantees vector cache redraws
+                                                val tempFile = File(context.cacheDir, "drawing_${System.currentTimeMillis()}.png")
                                                 FileOutputStream(tempFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
                                                 overlayImageUri = Uri.fromFile(tempFile)
                                                 overlayOffset = Offset.Zero; overlayScale = 1f; overlayRotation = 0f; overlayText = ""
@@ -273,27 +286,37 @@ class MainActivity : ComponentActivity() {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     if (isDrawingMode) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("Size: ${drawStrokeWidth.toInt()}", fontSize = 14.sp)
-                                                Slider(
-                                                    value = drawStrokeWidth, 
-                                                    onValueChange = { drawStrokeWidth = it }, 
-                                                    valueRange = 5f..100f,
-                                                    modifier = Modifier.width(120.dp).padding(start = 8.dp)
-                                                )
-                                            }
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("Color:")
-                                                Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Size: ${drawStrokeWidth.toInt()}", fontSize = 14.sp)
+                                            Slider(
+                                                value = drawStrokeWidth, 
+                                                onValueChange = { drawStrokeWidth = it }, 
+                                                valueRange = 5f..100f,
+                                                modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        // FIX: Hybrid Pen UI - Swatches + Color Wheel Trigger
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                            val quickColors = listOf(Color.Red, Color.Black, Color.White, Color.Blue, Color.Green, Color.Yellow)
+                                            quickColors.forEach { col ->
                                                 Box(modifier = Modifier
                                                     .size(36.dp)
-                                                    .background(drawColor, shape = androidx.compose.foundation.shape.CircleShape)
-                                                    .clickable { 
-                                                        activeColorContext = "pen"
-                                                        showColorPickerDialog = true 
-                                                    }
+                                                    .background(col, shape = CircleShape)
+                                                    .clickable { drawColor = col }
+                                                    .border(2.dp, if (drawColor == col) Color.Gray else Color.Transparent, CircleShape)
                                                 )
                                             }
+                                            // The Gradient Custom Wheel Button
+                                            Box(modifier = Modifier
+                                                .size(36.dp)
+                                                .background(Brush.sweepGradient(listOf(Color.Red, Color.Magenta, Color.Blue, Color.Cyan, Color.Green, Color.Yellow, Color.Red)), shape = CircleShape)
+                                                .clickable { 
+                                                    activeColorContext = "pen"
+                                                    showColorPickerDialog = true 
+                                                }
+                                                .border(2.dp, if (!quickColors.contains(drawColor)) Color.DarkGray else Color.Transparent, CircleShape)
+                                            )
                                         }
                                     } else {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -444,7 +467,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
-                                // Interactive Vector Construction Engine (Optimized)
+                                // Interactive Vector Construction Engine
                                 if (isDrawingMode) {
                                     Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
                                         detectDragGestures(
@@ -475,7 +498,7 @@ class MainActivity : ComponentActivity() {
                                                 style = Stroke(width = stroke.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
                                             )
                                         }
-                                        // Render currently active stroke (Zero-allocation preview)
+                                        // Render currently active stroke
                                         currentDrawStroke.takeIf { it.size > 1 }?.let { points ->
                                             val composePath = androidx.compose.ui.graphics.Path()
                                             composePath.moveTo(points.first().x, points.first().y)
@@ -506,7 +529,7 @@ class MainActivity : ComponentActivity() {
 """
     with open(f"{package_path}/MainActivity.kt", "w") as f:
         f.write(main_activity_content)
-    print("✅ 5-4 Generated Optimized GUI (Docked Panel, Free Color Selection)")
+    print("✅ 5-4 Generated Optimized GUI (Dynamic Color Wheel, Swatches, Cache Buster)")
 
 if __name__ == "__main__":
     generate()
