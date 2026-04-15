@@ -34,11 +34,11 @@ android {
         externalNativeBuild { cmake { cppFlags "" } }
     }
     buildFeatures { compose true }
-    compileOptions { 
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "11" }
+    kotlinOptions { jvmTarget = "17" }
     externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
 
@@ -49,10 +49,10 @@ dependencies {
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.material3:material3'
     implementation 'com.google.android.material:material:1.12.0'
-    
+
     // Lifecycle Process (For compliant App Open Ads detection)
     implementation 'androidx.lifecycle:lifecycle-process:2.8.7'
-    
+
     // AdMob SDK
     implementation 'com.google.android.gms:play-services-ads:23.1.0'
 }
@@ -80,7 +80,7 @@ org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-    print("✅ Gradle updated for Lifecycle Tracking.")
+    print("✅ Gradle updated (Java 17 & Lifecycle Tracking).")
 
 if __name__ == "__main__":
     generate_gradle_files()
