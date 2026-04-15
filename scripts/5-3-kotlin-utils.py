@@ -12,10 +12,11 @@ import android.net.Uri
 import java.io.File
 import kotlin.math.abs
 
-// Object to hold the current application state for the Native Engine
+// Object to hold the current application layers for the Native Engine
 object AppState {
     var currentBaseBitmap: Bitmap? = null
     var currentOverlayBitmap: Bitmap? = null
+    var currentDrawingBitmap: Bitmap? = null
 }
 
 // Data class bridging Compose vector paths to Android graphics
@@ -94,7 +95,6 @@ fun saveToGallery(context: Context, file: File, fileName: String): Uri? {
     } catch (e: Exception) { null }
 }
 
-// Proper Circular Arc calculation preventing upside-down text
 fun createTextBitmap(text: String, color: Int, typeface: Typeface?, bendAmount: Float): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color
@@ -116,13 +116,11 @@ fun createTextBitmap(text: String, color: Int, typeface: Typeface?, bendAmount: 
         return bitmap
     }
 
-    // Mathematically define the circular sweep
     val maxSweep = 160f 
     val sweep = (abs(bendAmount) / 100f) * maxSweep
     val sweepRads = (sweep * Math.PI / 180.0)
     val radius = (textWidth / sweepRads).toFloat()
 
-    // Calculate arc height (sagitta) to fit perfectly in the bounding box
     val sagitta = radius * (1f - kotlin.math.cos(sweepRads / 2.0)).toFloat()
     
     val bmpWidth = (textWidth + 300).toInt()
@@ -134,19 +132,13 @@ fun createTextBitmap(text: String, color: Int, typeface: Typeface?, bendAmount: 
     val path = Path()
 
     if (bendAmount > 0) {
-        // Smile curve (Text anchors to bottom of a huge circle)
         val centerY = bmpHeight / 2f + sagitta / 2f - radius
         val oval = RectF(midX - radius, centerY - radius, midX + radius, centerY + radius)
-        
-        // FIX: Start at bottom-left and sweep negative to guarantee a left-to-right upright text!
         path.addArc(oval, 90f + sweep / 2f, -sweep)
         canvas.drawTextOnPath(text, path, 0f, textHeight / 4f, paint)
     } else {
-        // Frown curve (Text anchors to top of a huge circle)
         val centerY = bmpHeight / 2f - sagitta / 2f + radius
         val oval = RectF(midX - radius, centerY - radius, midX + radius, centerY + radius)
-        
-        // Starts top-left, sweeps clockwise (upright)
         path.addArc(oval, 270f - sweep / 2f, sweep)
         canvas.drawTextOnPath(text, path, 0f, textHeight * 0.75f, paint)
     }
@@ -175,7 +167,7 @@ fun createDrawingBitmap(strokes: List<DrawStroke>, width: Int, height: Int): Bit
 """
     with open(f"{package_path}/OverlayUtils.kt", "w") as f:
         f.write(utils_content)
-    print("✅ 5-3 Generated OverlayUtils.kt (Upright Geometry Enforced)")
+    print("✅ 5-3 Generated OverlayUtils.kt (Multi-Layer AppState Enabled)")
 
 if __name__ == "__main__":
     generate()
