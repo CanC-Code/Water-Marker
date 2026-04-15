@@ -94,6 +94,7 @@ fun saveToGallery(context: Context, file: File, fileName: String): Uri? {
     } catch (e: Exception) { null }
 }
 
+// FIX: Proper Circular Arc calculation prevents text squishing and warping
 fun createTextBitmap(text: String, color: Int, typeface: Typeface?, bendAmount: Float): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color
@@ -104,40 +105,51 @@ fun createTextBitmap(text: String, color: Int, typeface: Typeface?, bendAmount: 
 
     val textWidth = paint.measureText(text)
     val textHeight = paint.descent() - paint.ascent()
+
+    if (bendAmount == 0f || textWidth <= 0f) {
+        val bmpWidth = (textWidth + 100).toInt().coerceAtLeast(1)
+        val bmpHeight = (textHeight + 100).toInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val baseline = bmpHeight / 2f - (paint.descent() + paint.ascent()) / 2f
+        canvas.drawText(text, bmpWidth / 2f, baseline, paint)
+        return bitmap
+    }
+
+    // Mathematically define the circular sweep
+    val maxSweep = 160f 
+    val sweep = (abs(bendAmount) / 100f) * maxSweep
+    val sweepRads = (sweep * Math.PI / 180.0)
+    val radius = (textWidth / sweepRads).toFloat()
+
+    // Calculate arc height (sagitta) to fit perfectly in the bounding box
+    val sagitta = radius * (1f - kotlin.math.cos(sweepRads / 2.0)).toFloat()
     
-    // FIX: Scale bounding box height based on curve severity to prevent clipping
-    val bmpWidth = (textWidth + abs(bendAmount) * 12 + 300).toInt()
-    val bmpHeight = (textHeight + abs(bendAmount) * 20 + 400).toInt()
+    val bmpWidth = (textWidth + 300).toInt()
+    val bmpHeight = (sagitta + textHeight + 300).toInt()
 
     val bitmap = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
-
     val midX = bmpWidth / 2f
-    val midY = bmpHeight / 2f
+    val path = Path()
 
-    if (bendAmount == 0f) {
-        val baseline = midY - (paint.descent() + paint.ascent()) / 2f
-        canvas.drawText(text, midX, baseline, paint)
+    if (bendAmount > 0) {
+        // Smile curve (Text anchors to bottom of a huge circle)
+        val centerY = bmpHeight / 2f + sagitta / 2f - radius
+        val oval = RectF(midX - radius, centerY - radius, midX + radius, centerY + radius)
+        path.addArc(oval, 90f - sweep / 2f, sweep)
+        canvas.drawTextOnPath(text, path, 0f, textHeight / 4f, paint)
     } else {
-        val path = Path()
-        val startX = (bmpWidth - textWidth) / 2f - 50f
-        val endX = startX + textWidth + 100f
-        
-        val controlY = midY + (bendAmount * 18f)
-
-        path.moveTo(startX, midY)
-        path.quadTo(midX, controlY, endX, midY)
-
-        val pathMeasure = PathMeasure(path, false)
-        val pathLength = pathMeasure.length
-        val hOffset = pathLength / 2f
-
-        canvas.drawTextOnPath(text, path, hOffset, textHeight / 3f, paint)
+        // Frown curve (Text anchors to top of a huge circle)
+        val centerY = bmpHeight / 2f - sagitta / 2f + radius
+        val oval = RectF(midX - radius, centerY - radius, midX + radius, centerY + radius)
+        path.addArc(oval, 270f - sweep / 2f, sweep)
+        canvas.drawTextOnPath(text, path, 0f, textHeight * 0.75f, paint)
     }
+
     return bitmap
 }
 
-// Rasterizes vector drawing inputs into a compliant Native Engine overlay
 fun createDrawingBitmap(strokes: List<DrawStroke>, width: Int, height: Int): Bitmap {
     val safeWidth = if (width > 0) width else 1080
     val safeHeight = if (height > 0) height else 1920
@@ -159,7 +171,7 @@ fun createDrawingBitmap(strokes: List<DrawStroke>, width: Int, height: Int): Bit
 """
     with open(f"{package_path}/OverlayUtils.kt", "w") as f:
         f.write(utils_content)
-    print("✅ 5-3 Generated OverlayUtils.kt (Fixed Height Curve Boundaries)")
+    print("✅ 5-3 Generated OverlayUtils.kt (Fixed Text Curvature Math)")
 
 if __name__ == "__main__":
     generate()
