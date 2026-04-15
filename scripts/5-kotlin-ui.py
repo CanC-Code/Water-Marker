@@ -37,10 +37,13 @@ class AppOpenAdManager(private val context: Context) {
     }
 }"""
 
+    # Updated JNI Signature to receive transformation logic!
     engine_content = """package com.watermarker
 class NativeEngine {
     init { System.loadLibrary("watermarker") }
-    external fun processWatermark(baseImagePath: String, overlayImagePath: String, outputPath: String, quality: Int): Boolean
+    external fun processWatermark(baseImagePath: String, overlayImagePath: String, outputPath: String, quality: Int,
+                                  overlayX: Float, overlayY: Float, overlayScale: Float, overlayRotation: Float,
+                                  overlayAlpha: Float, previewWidth: Float, previewHeight: Float): Boolean
 }"""
 
     main_activity_content = r"""package com.watermarker
@@ -80,6 +83,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -125,7 +129,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // FIX: Evaluate theme outside the remember block
             val systemDark = isSystemInDarkTheme()
             var isDarkMode by remember { mutableStateOf(systemDark) }
             
@@ -145,6 +148,10 @@ class MainActivity : ComponentActivity() {
                     var overlayOffset by remember { mutableStateOf(Offset.Zero) }
                     var overlayScale by remember { mutableStateOf(1f) }
                     var overlayRotation by remember { mutableStateOf(0f) }
+                    var overlayAlpha by remember { mutableStateOf(1f) } // NEW: Restored Opacity State
+                    
+                    var previewWidth by remember { mutableStateOf(1f) }
+                    var previewHeight by remember { mutableStateOf(1f) }
                     
                     val context = LocalContext.current
                     val coroutineScope = rememberCoroutineScope()
@@ -165,7 +172,7 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("WaterMaker") },
+                                title = { Text("WaterMarker") },
                                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                                 actions = {
                                     IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.Menu, "Menu") }
@@ -204,7 +211,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            Box(modifier = Modifier.fillMaxWidth().weight(1f).background(if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFE0E0E0)).clipToBounds()) {
+                            // Capture exact Box Dimensions to send to C++
+                            Box(modifier = Modifier.fillMaxWidth().weight(1f).background(if (isDarkMode) Color(0xFF2D2D2D) else Color(0xFFE0E0E0)).clipToBounds()
+                                .onGloballyPositioned { coordinates ->
+                                    previewWidth = coordinates.size.width.toFloat()
+                                    previewHeight = coordinates.size.height.toFloat()
+                                }) {
                                 val baseBitmap = remember(baseImageUri) { loadBitmapFromUri(context, baseImageUri) }
                                 val overlayBitmap = remember(overlayImageUri) { loadBitmapFromUri(context, overlayImageUri) }
                                 if (baseBitmap != null) {
@@ -212,7 +224,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (overlayBitmap != null) {
                                     Image(bitmap = overlayBitmap, contentDescription = null, modifier = Modifier
-                                        .graphicsLayer(translationX = overlayOffset.x, translationY = overlayOffset.y, scaleX = overlayScale, scaleY = overlayScale, rotationZ = overlayRotation)
+                                        .graphicsLayer(translationX = overlayOffset.x, translationY = overlayOffset.y, scaleX = overlayScale, scaleY = overlayScale, rotationZ = overlayRotation, alpha = overlayAlpha)
                                         .pointerInput(Unit) {
                                             detectTransformGestures { _, pan, zoom, rotation ->
                                                 overlayOffset += pan
@@ -229,6 +241,12 @@ class MainActivity : ComponentActivity() {
                             }
                             
                             Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // NEW: Restored Opacity Slider
+                            Text("Opacity Layer: ${(overlayAlpha * 100).toInt()}%", fontSize = 12.sp)
+                            Slider(value = overlayAlpha, onValueChange = { overlayAlpha = it }, valueRange = 0f..1f)
+                            
+                            Text("Export Quality: ${exportQuality.toInt()}%", fontSize = 12.sp)
                             Slider(value = exportQuality, onValueChange = { exportQuality = it }, valueRange = 10f..100f, enabled = outputFormat != "PNG")
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 listOf("JPEG", "PNG", "WEBP").forEach { format ->
@@ -259,7 +277,9 @@ class MainActivity : ComponentActivity() {
                                                 val outputPath = File(context.cacheDir, "final.${outputFormat.lowercase()}").absolutePath
                                                 
                                                 val success = try {
-                                                    nativeEngine.processWatermark(basePath, overlayPath, outputPath, exportQuality.toInt())
+                                                    // Pass the UI coordinate data directly to the native engine!
+                                                    nativeEngine.processWatermark(basePath, overlayPath, outputPath, exportQuality.toInt(),
+                                                        overlayOffset.x, overlayOffset.y, overlayScale, overlayRotation, overlayAlpha, previewWidth, previewHeight)
                                                 } catch (t: Throwable) {
                                                     t.printStackTrace()
                                                     false
@@ -352,11 +372,12 @@ class MainActivity : ComponentActivity() {
         f"{package_path}/MainActivity.kt": main_activity_content.strip()
     }
 
-    print("🎨 Generating UI with corrected Theme evaluation state...")
+    print("🎨 Generating UI with updated Signature and Layout measuring...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
+    print("✅ Complete: Your UI is synced to Native C++.")
 
 if __name__ == "__main__":
     generate_ui()
