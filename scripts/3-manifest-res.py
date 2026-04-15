@@ -3,8 +3,7 @@ import os
 def generate_manifest_and_res():
     manifest_path = "app/src/main/AndroidManifest.xml"
     res_dir = "app/src/main/res"
-    
-    # FIX: Added 'package' attribute, Android 13+ Permissions, and extractNativeLibs="true"
+
     manifest_content = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.watermarker">
@@ -12,10 +11,9 @@ def generate_manifest_and_res():
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-    
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    
+
     <application
         android:name=".WaterMarkerApp"
         android:largeHeap="true"
@@ -26,10 +24,10 @@ def generate_manifest_and_res():
         android:supportsRtl="true"
         android:extractNativeLibs="true"
         android:theme="@style/Theme.WaterMarker">
-        
+
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-7732503595590477~5528698466"/>
 
         <activity
             android:name=".MainActivity"
@@ -53,7 +51,7 @@ def generate_manifest_and_res():
         f"{res_dir}/values/themes.xml": themes_content.strip(),
     }
 
-    print("📄 Generating Manifest with proper App properties and backward-compatible permissions...")
+    print("📄 Generating Manifest with proper App properties and App ID...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f: f.write(content)
