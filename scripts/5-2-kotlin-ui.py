@@ -219,20 +219,28 @@ class MainActivity : ComponentActivity() {
                                 val overlayBitmap = remember(overlayImageUri) { loadStrictBitmap(context, overlayImageUri) }
                                 
                                 if (baseBitmap != null) {
-                                    // DOUBLE ROTATION BUG FIXED: We no longer pass .rotate() into the Compose Modifier!
                                     Image(bitmap = baseBitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                                 }
                                 if (overlayBitmap != null) {
                                     Image(bitmap = overlayBitmap.asImageBitmap(), contentDescription = null, modifier = Modifier
                                         .fillMaxSize() 
-                                        .graphicsLayer(translationX = overlayOffset.x, translationY = overlayOffset.y, scaleX = overlayScale, scaleY = overlayScale, rotationZ = overlayRotation, alpha = overlayAlpha)
+                                        // FIX: pointerInput is now ABOVE graphicsLayer.
+                                        // This ensures your touches are processed relative to the flat screen, not the transformed image!
                                         .pointerInput(Unit) {
                                             detectTransformGestures { _, pan, zoom, rotation ->
                                                 overlayOffset += pan
                                                 overlayScale = (overlayScale * zoom).coerceIn(0.1f, 10f)
                                                 overlayRotation += rotation
                                             }
-                                        },
+                                        }
+                                        .graphicsLayer(
+                                            translationX = overlayOffset.x, 
+                                            translationY = overlayOffset.y, 
+                                            scaleX = overlayScale, 
+                                            scaleY = overlayScale, 
+                                            rotationZ = overlayRotation, 
+                                            alpha = overlayAlpha
+                                        ),
                                         contentScale = ContentScale.Fit
                                     )
                                 }
@@ -327,7 +335,6 @@ class MainActivity : ComponentActivity() {
     private fun loadStrictBitmap(context: Context, uri: Uri?): Bitmap? {
         if (uri == null) return null
         return try {
-            // DENSITY BUG FIXED: inScaled = false prevents Android from warping image sizes behind our back
             val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888; inMutable = false; inScaled = false }
             BitmapFactory.decodeStream(context.contentResolver.openInputStream(uri), null, options)
         } catch (e: Exception) { null }
