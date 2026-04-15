@@ -4,11 +4,17 @@ def generate_manifest_and_res():
     manifest_path = "app/src/main/AndroidManifest.xml"
     res_dir = "app/src/main/res"
     
+    # FIX: Added 'package' attribute, Android 13+ Permissions, and extractNativeLibs="true"
     manifest_content = """<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.watermarker">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     
     <application
         android:name=".WaterMarkerApp"
@@ -18,6 +24,7 @@ def generate_manifest_and_res():
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:extractNativeLibs="true"
         android:theme="@style/Theme.WaterMarker">
         
         <meta-data
@@ -46,7 +53,7 @@ def generate_manifest_and_res():
         f"{res_dir}/values/themes.xml": themes_content.strip(),
     }
 
-    print("📄 Generating Manifest with Native Icons enabled...")
+    print("📄 Generating Manifest with proper App properties and backward-compatible permissions...")
     for path, content in files.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f: f.write(content)
