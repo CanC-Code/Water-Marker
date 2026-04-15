@@ -27,7 +27,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,9 +41,12 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -98,17 +105,26 @@ class MainActivity : ComponentActivity() {
 
                     var baseImageUri by remember { mutableStateOf<Uri?>(null) }
                     var overlayImageUri by remember { mutableStateOf<Uri?>(null) }
-                    
-                    // Text Properties
+
+                    // Topography & Typography Properties
                     var showTextDialog by remember { mutableStateOf(false) }
                     var overlayText by remember { mutableStateOf("") }
                     var overlayTextColor by remember { mutableStateOf(Color.Black) }
                     var overlayTextBend by remember { mutableStateOf(0f) }
                     var customTypeface by remember { mutableStateOf<Typeface?>(null) }
-                    
+
+                    // Freeform Pen Tool Properties
+                    var isDrawingMode by remember { mutableStateOf(false) }
+                    var drawPaths by remember { mutableStateOf(listOf<DrawStroke>()) }
+                    var currentDrawPath by remember { mutableStateOf<android.graphics.Path?>(null) }
+                    var drawColor by remember { mutableStateOf(Color.Red) }
+                    var drawStrokeWidth by remember { mutableStateOf(15f) }
+
+                    // Output Directives
                     var exportQuality by remember { mutableStateOf(100f) }
                     var outputFormat by remember { mutableStateOf("JPEG") }
 
+                    // Spatial Transformation Matrices
                     var baseRotation by remember { mutableStateOf(0f) }
                     var overlayOffset by remember { mutableStateOf(Offset.Zero) }
                     var overlayScale by remember { mutableStateOf(1f) }
@@ -126,8 +142,8 @@ class MainActivity : ComponentActivity() {
                     fun refreshInventory() { savedOverlays = inventoryDir.listFiles()?.toList() ?: emptyList() }
 
                     val basePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> baseImageUri = uri; baseRotation = 0f }
-                    val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> 
-                        overlayImageUri = uri; overlayOffset = Offset.Zero; overlayScale = 1f; overlayRotation = 0f; overlayText = "" 
+                    val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                        overlayImageUri = uri; overlayOffset = Offset.Zero; overlayScale = 1f; overlayRotation = 0f; overlayText = ""
                     }
                     val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                         uri?.let {
@@ -135,35 +151,58 @@ class MainActivity : ComponentActivity() {
                                 val tempFile = File(context.cacheDir, "custom_font.ttf")
                                 FileOutputStream(tempFile).use { out -> context.contentResolver.openInputStream(it)?.copyTo(out) }
                                 customTypeface = Typeface.createFromFile(tempFile)
-                                Toast.makeText(context, "Font loaded!", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) { Toast.makeText(context, "Failed to load font.", Toast.LENGTH_SHORT).show() }
+                                Toast.makeText(context, "Font compiled!", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) { Toast.makeText(context, "Font execution failed.", Toast.LENGTH_SHORT).show() }
                         }
                     }
 
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("WaterMaker") },
+                                title = { Text(if (isDrawingMode) "Freeform Pen Tool" else "WaterMaker") },
                                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                                 actions = {
-                                    // QOL FEATURE: TRASH CAN
-                                    if (overlayImageUri != null) {
-                                        IconButton(onClick = { 
-                                            overlayImageUri = null
-                                            overlayText = ""
-                                            Toast.makeText(context, "Overlay Removed", Toast.LENGTH_SHORT).show()
-                                        }) { Icon(Icons.Default.Delete, "Remove Overlay", tint = Color.Red) }
-                                    }
-                                
-                                    IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.Menu, "Menu") }
-                                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                        DropdownMenuItem(text = { Text("Toggle Theme") }, onClick = { showMenu = false; isDarkMode = !isDarkMode })
-                                        HorizontalDivider()
-                                        DropdownMenuItem(text = { Text("Load Base Image") }, onClick = { showMenu = false; basePicker.launch("image/*") })
-                                        DropdownMenuItem(text = { Text("Load Overlay Image") }, onClick = { showMenu = false; overlayPicker.launch("image/*") })
-                                        DropdownMenuItem(text = { Text("Add Text Overlay") }, onClick = { showMenu = false; showTextDialog = true })
-                                        DropdownMenuItem(text = { Text("My Overlay Inventory") }, onClick = { showMenu = false; showInventory = true; refreshInventory() })
-                                        DropdownMenuItem(text = { Text("Import Font (.ttf)") }, onClick = { showMenu = false; fontPicker.launch("*/*") })
+                                    if (isDrawingMode) {
+                                        if (drawPaths.isNotEmpty()) {
+                                            IconButton(onClick = { drawPaths = drawPaths.dropLast(1) }) { Icon(Icons.Default.ArrowBack, "Undo Stroke") }
+                                        }
+                                        IconButton(onClick = { drawPaths = emptyList() }) { Icon(Icons.Default.Clear, "Clear Canvas") }
+                                        IconButton(onClick = {
+                                            // Matrix rasterization of gesture vectors
+                                            if (drawPaths.isNotEmpty()) {
+                                                val bmp = createDrawingBitmap(drawPaths, previewWidth.toInt(), previewHeight.toInt())
+                                                val tempFile = File(context.cacheDir, "drawing.png")
+                                                FileOutputStream(tempFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
+                                                overlayImageUri = Uri.fromFile(tempFile)
+                                                
+                                                // Center alignment calibration for exact coordinate mapping
+                                                overlayOffset = Offset.Zero
+                                                overlayScale = 1f
+                                                overlayRotation = 0f
+                                                overlayText = ""
+                                            }
+                                            isDrawingMode = false
+                                        }) { Icon(Icons.Default.Check, "Finalize Drawing", tint = Color(0xFF10B981)) }
+                                    } else {
+                                        if (overlayImageUri != null) {
+                                            IconButton(onClick = {
+                                                overlayImageUri = null
+                                                overlayText = ""
+                                                Toast.makeText(context, "Overlay terminated.", Toast.LENGTH_SHORT).show()
+                                            }) { Icon(Icons.Default.Delete, "Remove Overlay", tint = Color.Red) }
+                                        }
+
+                                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.Menu, "Menu") }
+                                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                            DropdownMenuItem(text = { Text("Toggle Interface Theme") }, onClick = { showMenu = false; isDarkMode = !isDarkMode })
+                                            HorizontalDivider()
+                                            DropdownMenuItem(text = { Text("Load Architectural Base") }, onClick = { showMenu = false; basePicker.launch("image/*") })
+                                            DropdownMenuItem(text = { Text("Load External Overlay") }, onClick = { showMenu = false; overlayPicker.launch("image/*") })
+                                            DropdownMenuItem(text = { Text("Generate Topography Text") }, onClick = { showMenu = false; showTextDialog = true })
+                                            DropdownMenuItem(text = { Text("Activate Pen Tool") }, onClick = { showMenu = false; isDrawingMode = true; drawPaths = emptyList() })
+                                            DropdownMenuItem(text = { Text("Local Overlay Vault") }, onClick = { showMenu = false; showInventory = true; refreshInventory() })
+                                            DropdownMenuItem(text = { Text("Import TrueType Font (.ttf)") }, onClick = { showMenu = false; fontPicker.launch("*/*") })
+                                        }
                                     }
                                 }
                             )
@@ -174,43 +213,42 @@ class MainActivity : ComponentActivity() {
                             if (showInventory) {
                                 AlertDialog(
                                     onDismissRequest = { showInventory = false },
-                                    title = { Text("My Overlays") },
+                                    title = { Text("Local Overlay Vault") },
                                     text = {
-                                        if (savedOverlays.isEmpty()) Text("No overlays saved yet.")
+                                        if (savedOverlays.isEmpty()) Text("No serialized assets found.")
                                         else LazyVerticalGrid(columns = GridCells.Fixed(2)) {
                                             items(savedOverlays) { file ->
                                                 Box(modifier = Modifier.padding(4.dp).background(Color.LightGray).aspectRatio(1f)) {
                                                     val bmp = remember { loadBitmapFromFile(file.absolutePath)?.asImageBitmap() }
                                                     if (bmp != null) {
-                                                        Image(bitmap = bmp, contentDescription = "Saved Overlay", modifier = Modifier.fillMaxSize().clickable {
+                                                        Image(bitmap = bmp, contentDescription = "Asset", modifier = Modifier.fillMaxSize().clickable {
                                                             overlayImageUri = Uri.fromFile(file)
                                                             overlayOffset = Offset.Zero; overlayScale = 1f; overlayRotation = 0f
-                                                            overlayText = "" // Reset text mode
+                                                            overlayText = ""
                                                             showInventory = false
                                                         })
                                                     }
                                                     IconButton(onClick = { file.delete(); refreshInventory() }, modifier = Modifier.align(Alignment.TopEnd)) {
-                                                        Icon(Icons.Default.Delete, "Delete", tint = Color.Red)
+                                                        Icon(Icons.Default.Delete, "Eradicate", tint = Color.Red)
                                                     }
                                                 }
                                             }
                                         }
                                     },
-                                    confirmButton = { Button(onClick = { showInventory = false }) { Text("Close") } }
+                                    confirmButton = { Button(onClick = { showInventory = false }) { Text("Terminate") } }
                                 )
                             }
 
                             if (showTextDialog) {
                                 Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
                                     Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Create Text", style = MaterialTheme.typography.titleMedium)
-                                        OutlinedTextField(value = overlayText, onValueChange = { overlayText = it }, label = { Text("Type text") })
-                                        
-                                        // QOL FEATURE: CURVED TEXT SLIDER
+                                        Text("Typography Architect", style = MaterialTheme.typography.titleMedium)
+                                        OutlinedTextField(value = overlayText, onValueChange = { overlayText = it }, label = { Text("Input String") })
+
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Curve Text", fontSize = 12.sp)
+                                        Text("Topography Curvature", fontSize = 12.sp)
                                         Slider(value = overlayTextBend, onValueChange = { overlayTextBend = it }, valueRange = -100f..100f)
-                                        
+
                                         Spacer(modifier = Modifier.height(16.dp))
                                         ColorWheel { color -> overlayTextColor = color }
                                         Spacer(modifier = Modifier.height(16.dp))
@@ -221,9 +259,25 @@ class MainActivity : ComponentActivity() {
                                                 val tempFile = File(context.cacheDir, "text.png")
                                                 FileOutputStream(tempFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
                                                 overlayImageUri = Uri.fromFile(tempFile)
-                                                // If this is a new text, reset position. If editing existing, keep position!
                                             }
-                                        }) { Text("Apply") }
+                                        }) { Text("Execute Render") }
+                                    }
+                                }
+                            }
+
+                            if (isDrawingMode) {
+                                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text("Stroke Radius: ${drawStrokeWidth.toInt()}px", fontSize = 12.sp)
+                                        Slider(value = drawStrokeWidth, onValueChange = { drawStrokeWidth = it }, valueRange = 5f..100f)
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                            listOf(Color.Red, Color.Black, Color.White, Color.Blue, Color.Green, Color.Yellow).forEach { col ->
+                                                Box(modifier = Modifier.size(30.dp).background(col, shape = androidx.compose.foundation.shape.CircleShape)
+                                                    .clickable { drawColor = col }
+                                                    .background(if (drawColor == col) Color.Black.copy(alpha = 0.3f) else Color.Transparent)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -240,14 +294,13 @@ class MainActivity : ComponentActivity() {
                                 if (baseBitmap != null) {
                                     Image(bitmap = baseBitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                                 }
-                                if (overlayBitmap != null) {
+                                if (overlayBitmap != null && !isDrawingMode) {
                                     Image(bitmap = overlayBitmap.asImageBitmap(), contentDescription = null, modifier = Modifier
                                         .fillMaxSize()
-                                        // QOL FEATURE: DOUBLE TAP TO EDIT
                                         .pointerInput(Unit) {
                                             detectTapGestures(
                                                 onDoubleTap = {
-                                                    // Only open if the current overlay is generated text
+                                                    // Dynamic access modifier for localized typography strings
                                                     if (overlayText.isNotEmpty()) {
                                                         showTextDialog = true
                                                     }
@@ -273,77 +326,120 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
+                                // Interactive Vector Construction Engine
+                                if (isDrawingMode) {
+                                    Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                        detectDragGestures(
+                                            onDragStart = { offset ->
+                                                val path = android.graphics.Path()
+                                                path.moveTo(offset.x, offset.y)
+                                                currentDrawPath = path
+                                            },
+                                            onDrag = { change, _ ->
+                                                currentDrawPath?.lineTo(change.position.x, change.position.y)
+                                                // Trigger recomposition sequence by cloning object state
+                                                currentDrawPath = android.graphics.Path(currentDrawPath)
+                                            },
+                                            onDragEnd = {
+                                                currentDrawPath?.let {
+                                                    drawPaths = drawPaths + DrawStroke(it, drawColor.toArgb(), drawStrokeWidth)
+                                                    currentDrawPath = null
+                                                }
+                                            }
+                                        )
+                                    }) {
+                                        // Composite historical vectors
+                                        drawPaths.forEach { stroke ->
+                                            drawPath(
+                                                path = stroke.path.asComposePath(),
+                                                color = Color(stroke.color),
+                                                style = Stroke(width = stroke.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                            )
+                                        }
+                                        // Extrapolate current vector pipeline
+                                        currentDrawPath?.let {
+                                            drawPath(
+                                                path = it.asComposePath(),
+                                                color = drawColor,
+                                                style = Stroke(width = drawStrokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                            )
+                                        }
+                                    }
+                                }
+
                                 LaunchedEffect(baseBitmap, overlayBitmap) {
                                     if (baseBitmap != null) AppState.currentBaseBitmap = baseBitmap
                                     if (overlayBitmap != null) AppState.currentOverlayBitmap = overlayBitmap
                                 }
                             }
 
-                            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Button(onClick = {
-                                    if (overlayImageUri != null) {
-                                        val destFile = File(inventoryDir, "overlay_${System.currentTimeMillis()}.png")
-                                        context.contentResolver.openInputStream(overlayImageUri!!)?.use { input -> destFile.outputStream().use { input.copyTo(it) } }
-                                        Toast.makeText(context, "Saved to Inventory!", Toast.LENGTH_SHORT).show()
-                                        refreshInventory()
-                                    } else Toast.makeText(context, "Load an overlay first", Toast.LENGTH_SHORT).show()
-                                }) { Text("Save Overlay") }
-                                OutlinedButton(onClick = { baseRotation = (baseRotation + 90f) % 360f }, enabled = baseImageUri != null) { Text("Rotate Base 90°") }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text("Opacity Layer: ${(overlayAlpha * 100).toInt()}%", fontSize = 12.sp)
-                            Slider(value = overlayAlpha, onValueChange = { overlayAlpha = it }, valueRange = 0f..1f)
-                            Text("Export Quality: ${exportQuality.toInt()}%", fontSize = 12.sp)
-                            Slider(value = exportQuality, onValueChange = { exportQuality = it }, valueRange = 10f..100f, enabled = outputFormat != "PNG")
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                listOf("JPEG", "PNG", "WEBP").forEach { format ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = outputFormat == format, onClick = { outputFormat = format }); Text(format, fontSize = 14.sp) }
+                            if (!isDrawingMode) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Button(onClick = {
+                                        if (overlayImageUri != null) {
+                                            val destFile = File(inventoryDir, "overlay_${System.currentTimeMillis()}.png")
+                                            context.contentResolver.openInputStream(overlayImageUri!!)?.use { input -> destFile.outputStream().use { input.copyTo(it) } }
+                                            Toast.makeText(context, "Asset Cached!", Toast.LENGTH_SHORT).show()
+                                            refreshInventory()
+                                        } else Toast.makeText(context, "No active asset detected.", Toast.LENGTH_SHORT).show()
+                                    }) { Text("Serialize Asset") }
+                                    OutlinedButton(onClick = { baseRotation = (baseRotation + 90f) % 360f }, enabled = baseImageUri != null) { Text("90° Matrix Pivot") }
                                 }
-                            }
 
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
-                                onClick = {
-                                    val baseBmp = AppState.currentBaseBitmap
-                                    val overlayBmp = AppState.currentOverlayBitmap
-                                    if (baseBmp != null && overlayBmp != null) {
-                                        Toast.makeText(context, "Processing...", Toast.LENGTH_SHORT).show()
-                                        coroutineScope.launch(Dispatchers.IO) {
-                                            try {
-                                                val boxW = previewWidth
-                                                val boxH = previewHeight
-                                                val baseScaleUI = min(boxW / baseBmp.width, boxH / baseBmp.height)
-                                                val overScaleUI = min(boxW / overlayBmp.width, boxH / overlayBmp.height)
-
-                                                val realOffsetX = overlayOffset.x / baseScaleUI
-                                                val realOffsetY = overlayOffset.y / baseScaleUI
-                                                val realOverScale = (overScaleUI * overlayScale) / baseScaleUI
-
-                                                val mutableBase = baseBmp.copy(Bitmap.Config.ARGB_8888, true)
-                                                val processOverlay = overlayBmp.copy(Bitmap.Config.ARGB_8888, false)
-
-                                                val success = try {
-                                                    nativeEngine.processWatermark(mutableBase, processOverlay, realOffsetX, realOffsetY, realOverScale, overlayRotation, overlayAlpha)
-                                                } catch (t: Throwable) { false }
-
-                                                withContext(Dispatchers.Main) {
-                                                    if (success) {
-                                                        val outputPath = File(context.cacheDir, "final.${outputFormat.lowercase()}").absolutePath
-                                                        FileOutputStream(outputPath).use { out ->
-                                                            val cf = if (outputFormat == "PNG") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-                                                            mutableBase.compress(cf, exportQuality.toInt(), out)
-                                                        }
-                                                        val savedUri = saveToGallery(context, File(outputPath), "Watermark_${System.currentTimeMillis()}.${outputFormat.lowercase()}")
-                                                        if (savedUri != null) Toast.makeText(context, "✅ Saved to Gallery!", Toast.LENGTH_LONG).show()
-                                                    } else Toast.makeText(context, "❌ Native Engine Error.", Toast.LENGTH_LONG).show()
-                                                }
-                                            } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Process Error", Toast.LENGTH_LONG).show() } }
-                                        }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text("Render Opacity: ${(overlayAlpha * 100).toInt()}%", fontSize = 12.sp)
+                                Slider(value = overlayAlpha, onValueChange = { overlayAlpha = it }, valueRange = 0f..1f)
+                                Text("Extraction Density: ${exportQuality.toInt()}%", fontSize = 12.sp)
+                                Slider(value = exportQuality, onValueChange = { exportQuality = it }, valueRange = 10f..100f, enabled = outputFormat != "PNG")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    listOf("JPEG", "PNG", "WEBP").forEach { format ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = outputFormat == format, onClick = { outputFormat = format }); Text(format, fontSize = 14.sp) }
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(50.dp)
-                            ) { Text("PROCESS WATERMARK") }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        val baseBmp = AppState.currentBaseBitmap
+                                        val overlayBmp = AppState.currentOverlayBitmap
+                                        if (baseBmp != null && overlayBmp != null) {
+                                            Toast.makeText(context, "Initiating NDK Pipeline...", Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                try {
+                                                    val boxW = previewWidth
+                                                    val boxH = previewHeight
+                                                    val baseScaleUI = min(boxW / baseBmp.width, boxH / baseBmp.height)
+                                                    val overScaleUI = min(boxW / overlayBmp.width, boxH / overlayBmp.height)
+
+                                                    val realOffsetX = overlayOffset.x / baseScaleUI
+                                                    val realOffsetY = overlayOffset.y / baseScaleUI
+                                                    val realOverScale = (overScaleUI * overlayScale) / baseScaleUI
+
+                                                    val mutableBase = baseBmp.copy(Bitmap.Config.ARGB_8888, true)
+                                                    val processOverlay = overlayBmp.copy(Bitmap.Config.ARGB_8888, false)
+
+                                                    val success = try {
+                                                        nativeEngine.processWatermark(mutableBase, processOverlay, realOffsetX, realOffsetY, realOverScale, overlayRotation, overlayAlpha)
+                                                    } catch (t: Throwable) { false }
+
+                                                    withContext(Dispatchers.Main) {
+                                                        if (success) {
+                                                            val outputPath = File(context.cacheDir, "final.${outputFormat.lowercase()}").absolutePath
+                                                            FileOutputStream(outputPath).use { out ->
+                                                                val cf = if (outputFormat == "PNG") Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                                                                mutableBase.compress(cf, exportQuality.toInt(), out)
+                                                            }
+                                                            val savedUri = saveToGallery(context, File(outputPath), "Watermark_${System.currentTimeMillis()}.${outputFormat.lowercase()}")
+                                                            if (savedUri != null) Toast.makeText(context, "✅ Output Validated & Saved!", Toast.LENGTH_LONG).show()
+                                                        } else Toast.makeText(context, "❌ NDK Computation Failure.", Toast.LENGTH_LONG).show()
+                                                    }
+                                                } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Pipeline Desync", Toast.LENGTH_LONG).show() } }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                                ) { Text("EXECUTE WATERMARK ENGINE") }
+                            }
                         }
                     }
                 }
@@ -354,7 +450,7 @@ class MainActivity : ComponentActivity() {
 """
     with open(f"{package_path}/MainActivity.kt", "w") as f:
         f.write(main_activity_content)
-    print("✅ 5-4 Generated Extended Compose UI (Double-Tap, Curve, Trash)")
+    print("✅ 5-4 Generated Extended Compose UI (Matrix UI, Pen Tool, Trash, Double-Tap)")
 
 if __name__ == "__main__":
     generate()
