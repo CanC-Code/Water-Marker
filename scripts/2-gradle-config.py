@@ -1,86 +1,111 @@
 import os
 
-def generate_gradle_files():
-    build_gradle = """
-buildscript {
-    repositories { google(); mavenCentral() }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.0'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21"
+def generate():
+    # 1. Generate settings.gradle
+    settings_content = """pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
     }
 }
-allprojects {
-    repositories { google(); mavenCentral() }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "WaterMarker"
+include ':app'
+"""
+    with open("settings.gradle", "w") as f:
+        f.write(settings_content)
+
+    # 2. Generate Project-level build.gradle
+    project_build_content = """plugins {
+    id 'com.android.application' version '8.2.1' apply false
+    id 'org.jetbrains.kotlin.android' version '2.0.0' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.0' apply false
 }
 """
+    with open("build.gradle", "w") as f:
+        f.write(project_build_content)
 
-    app_gradle = """
-plugins {
+    # 3. Generate App-level build.gradle (Includes AdMob and Compose Plugin)
+    app_dir = "app"
+    os.makedirs(app_dir, exist_ok=True)
+
+    app_build_content = """plugins {
     id 'com.android.application'
-    id 'kotlin-android'
-    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
     namespace 'com.watermarker'
-    compileSdk 35
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.watermarker"
         minSdk 24
-        targetSdk 35
-        versionCode 12
-        versionName "2.1"
-        externalNativeBuild { cmake { cppFlags "" } }
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+            }
+        }
     }
-    buildFeatures { compose true }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    buildFeatures {
+        compose true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1+"
+        }
+    }
+
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
-    kotlinOptions { jvmTarget = "17" }
-    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.15.0'
-    implementation 'androidx.activity:activity-compose:1.9.3'
-    implementation platform('androidx.compose:compose-bom:2024.10.01')
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    
+    // Compose BOM
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
     implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
-    implementation 'com.google.android.material:material:1.12.0'
-
-    // Lifecycle Process (For compliant App Open Ads detection)
-    implementation 'androidx.lifecycle:lifecycle-process:2.8.7'
-
-    // AdMob SDK
-    implementation 'com.google.android.gms:play-services-ads:23.1.0'
+    
+    // AdMob Integration
+    implementation 'com.google.android.gms:play-services-ads:23.0.0'
 }
 """
-
-    settings_gradle = """
-rootProject.name = "WaterMarker"
-include ':app'
-"""
-
-    gradle_properties = """
-android.useAndroidX=true
-android.enableJetifier=true
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-"""
-
-    files = {
-        "build.gradle": build_gradle.strip(),
-        "app/build.gradle": app_gradle.strip(),
-        "settings.gradle": settings_gradle.strip(),
-        "gradle.properties": gradle_properties.strip()
-    }
-
-    for path, content in files.items():
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-        with open(path, "w") as f:
-            f.write(content)
-    print("✅ Gradle updated (Java 17 & Lifecycle Tracking).")
+    with open(f"{app_dir}/build.gradle", "w") as f:
+        f.write(app_build_content)
+    print("✅ 2 Generated settings.gradle & build.gradle (Kotlin 2.0 Compose Plugin & AdMob)")
 
 if __name__ == "__main__":
-    generate_gradle_files()
+    generate()
