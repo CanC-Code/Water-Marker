@@ -6,34 +6,30 @@ def generate():
     os.makedirs(manifest_dir, exist_ok=True)
     os.makedirs(res_values_dir, exist_ok=True)
 
-    # 1. Generate colors.xml
+    # 1. colors.xml
     colors_content = """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="primary">#6200EE</color>
+    <color name="primary_variant">#3700B3</color>
+    <color name="white">#FFFFFF</color>
 </resources>
 """
     with open(f"{res_values_dir}/colors.xml", "w") as f:
         f.write(colors_content)
 
-    # 2. Generate themes.xml (DEFINES Theme.Watermarker)
+    # 2. themes.xml - Explicitly using library-defined Material3 tokens
     themes_content = """<?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.Watermarker" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/purple_500</item>
-        <item name="android:statusBarColor">@color/purple_700</item>
+        <item name="colorPrimary">@color/primary</item>
+        <item name="android:statusBarColor">@color/primary_variant</item>
     </style>
 </resources>
 """
     with open(f"{res_values_dir}/themes.xml", "w") as f:
         f.write(themes_content)
 
-    # 3. Generate AndroidManifest.xml (Includes AdMob and correctly linked Theme)
+    # 3. AndroidManifest.xml
     manifest_content = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -69,7 +65,7 @@ def generate():
     with open(f"{manifest_dir}/AndroidManifest.xml", "w") as f:
         f.write(manifest_content)
     
-    print("✅ 3 Generated Manifest, Themes, and Colors (Theme.Watermarker Fix Applied)")
+    print("✅ 3 Updated Manifest & Resources (XML Linking Fixed)")
 
 if __name__ == "__main__":
     generate()
