@@ -20,7 +20,8 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
 import java.util.Date
 
-class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, DefaultLifecycleObserver {
+// Notice how WatermarkerApp no longer implements DefaultLifecycleObserver
+class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
 
     private lateinit var appOpenAdManager: AppOpenAdManager
     private var currentActivity: Activity? = null
@@ -29,23 +30,14 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, De
         super.onCreate()
         registerActivityLifecycleCallbacks(this)
         
-        // Initialize the Mobile Ads SDK
         MobileAds.initialize(this) {}
         
-        // Observe the app process lifecycle to trigger App Open Ads
-        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         appOpenAdManager = AppOpenAdManager()
         
-        // Pre-fetch an ad on boot
+        // Register the inner class as the observer instead of the App itself
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appOpenAdManager)
+        
         appOpenAdManager.loadAd()
-    }
-
-    /**
-     * Triggered by DefaultLifecycleObserver when the app returns to the foreground.
-     * We removed 'super.onStart' to resolve the 'Multiple supertypes' compilation error.
-     */
-    override fun onStart(owner: LifecycleOwner) {
-        appOpenAdManager.showAdIfAvailable(currentActivity)
     }
 
     override fun onActivityStarted(activity: Activity) {
@@ -56,7 +48,6 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, De
         currentActivity = activity
     }
 
-    // Required overrides for ActivityLifecycleCallbacks (unused)
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivityPaused(activity: Activity) {}
     override fun onActivityStopped(activity: Activity) {}
@@ -67,11 +58,18 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, De
         }
     }
 
-    inner class AppOpenAdManager {
+    // The AdManager handles its own lifecycle observation now!
+    inner class AppOpenAdManager : DefaultLifecycleObserver {
         private var appOpenAd: AppOpenAd? = null
         private var isLoadingAd = false
         var isShowingAd = false
         private var loadTime: Long = 0
+
+        // Triggered when the app comes to the foreground
+        override fun onStart(owner: LifecycleOwner) {
+            super.onStart(owner)
+            showAdIfAvailable(currentActivity)
+        }
 
         fun loadAd() {
             if (isLoadingAd || isAdAvailable()) return
@@ -79,7 +77,6 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, De
             
             val request = AdRequest.Builder().build()
             
-            // Your Ad Unit ID: ca-app-pub-7732503595590477/4459993522
             AppOpenAd.load(
                 this@WatermarkerApp,
                 "ca-app-pub-7732503595590477/4459993522",
@@ -138,7 +135,7 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks, De
 """
     with open(f"{package_path}/WatermarkerApp.kt", "w") as f:
         f.write(app_content)
-    print("✅ 5-5 Generated WatermarkerApp.kt (Fixed Compilation & AdMob Ready)")
+    print("✅ 5-5 Generated WatermarkerApp.kt (Fixed Ambiguity Error)")
 
 if __name__ == "__main__":
     generate()
