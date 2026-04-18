@@ -20,7 +20,6 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
 import java.util.Date
 
-// Notice how WatermarkerApp no longer implements DefaultLifecycleObserver
 class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
 
     private lateinit var appOpenAdManager: AppOpenAdManager
@@ -31,41 +30,30 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
         registerActivityLifecycleCallbacks(this)
         
         MobileAds.initialize(this) {}
-        
         appOpenAdManager = AppOpenAdManager()
-        
-        // Register the inner class as the observer instead of the App itself
         ProcessLifecycleOwner.get().lifecycle.addObserver(appOpenAdManager)
-        
         appOpenAdManager.loadAd()
     }
 
-    override fun onActivityStarted(activity: Activity) {
-        currentActivity = activity
-    }
-
-    override fun onActivityResumed(activity: Activity) {
-        currentActivity = activity
-    }
-
+    override fun onActivityStarted(activity: Activity) { currentActivity = activity }
+    override fun onActivityResumed(activity: Activity) { currentActivity = activity }
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivityPaused(activity: Activity) {}
     override fun onActivityStopped(activity: Activity) {}
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
     override fun onActivityDestroyed(activity: Activity) {
-        if (currentActivity == activity) {
-            currentActivity = null
-        }
+        if (currentActivity == activity) currentActivity = null
     }
 
-    // The AdManager handles its own lifecycle observation now!
     inner class AppOpenAdManager : DefaultLifecycleObserver {
         private var appOpenAd: AppOpenAd? = null
         private var isLoadingAd = false
         var isShowingAd = false
         private var loadTime: Long = 0
+        
+        // Tracks if the cold-boot ad has been presented
+        private var hasShownInitialAd = false
 
-        // Triggered when the app comes to the foreground
         override fun onStart(owner: LifecycleOwner) {
             super.onStart(owner)
             showAdIfAvailable(currentActivity)
@@ -87,6 +75,11 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
                         appOpenAd = ad
                         isLoadingAd = false
                         loadTime = Date().time
+                        
+                        // FIX: If the app just opened, trigger ad instantly upon loading
+                        if (!hasShownInitialAd && currentActivity != null) {
+                            showAdIfAvailable(currentActivity)
+                        }
                     }
                     override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                         isLoadingAd = false
@@ -115,15 +108,18 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
                 override fun onAdDismissedFullScreenContent() {
                     appOpenAd = null
                     isShowingAd = false
+                    hasShownInitialAd = true
                     loadAd()
                 }
                 override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                     appOpenAd = null
                     isShowingAd = false
+                    hasShownInitialAd = true
                     loadAd()
                 }
                 override fun onAdShowedFullScreenContent() {
                     isShowingAd = true
+                    hasShownInitialAd = true
                 }
             }
             activity?.let {
@@ -135,7 +131,7 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
 """
     with open(f"{package_path}/WatermarkerApp.kt", "w") as f:
         f.write(app_content)
-    print("✅ 5-5 Generated WatermarkerApp.kt (Fixed Ambiguity Error)")
+    print("✅ 5-5 Generated WatermarkerApp.kt (Cold Boot AdMob Fix)")
 
 if __name__ == "__main__":
     generate()
