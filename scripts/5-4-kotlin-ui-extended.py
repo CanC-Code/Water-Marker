@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -64,7 +65,6 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.*
 
-// GLOBAL STATE SNAPSHOT FOR UNDO/REDO ENGINE
 data class GlobalSnapshot(
     val overlayImageUri: Uri?,
     val overlayText: String,
@@ -75,7 +75,9 @@ data class GlobalSnapshot(
     val overlayRotation: Float,
     val drawingOffset: Offset,
     val drawingScale: Float,
-    val drawingRotation: Float
+    val drawingRotation: Float,
+    val overlayAlpha: Float,
+    val baseRotation: Float
 )
 
 @Composable
@@ -163,7 +165,6 @@ class MainActivity : ComponentActivity() {
                     var previewWidth by remember { mutableStateOf(1f) }
                     var previewHeight by remember { mutableStateOf(1f) }
 
-                    // GLOBAL HISTORY STACKS (MAX 10)
                     var undoStack by remember { mutableStateOf(listOf<GlobalSnapshot>()) }
                     var redoStack by remember { mutableStateOf(listOf<GlobalSnapshot>()) }
 
@@ -171,7 +172,8 @@ class MainActivity : ComponentActivity() {
                         GlobalSnapshot(
                             overlayImageUri, overlayText, drawingImageUri, drawPaths,
                             overlayOffset, overlayScale, overlayRotation,
-                            drawingOffset, drawingScale, drawingRotation
+                            drawingOffset, drawingScale, drawingRotation,
+                            overlayAlpha, baseRotation
                         )
                     }
 
@@ -197,6 +199,8 @@ class MainActivity : ComponentActivity() {
                             drawingOffset = prev.drawingOffset
                             drawingScale = prev.drawingScale
                             drawingRotation = prev.drawingRotation
+                            overlayAlpha = prev.overlayAlpha
+                            baseRotation = prev.baseRotation
                         }
                     }
 
@@ -217,6 +221,8 @@ class MainActivity : ComponentActivity() {
                             drawingOffset = next.drawingOffset
                             drawingScale = next.drawingScale
                             drawingRotation = next.drawingRotation
+                            overlayAlpha = next.overlayAlpha
+                            baseRotation = next.baseRotation
                         }
                     }
 
@@ -357,9 +363,6 @@ class MainActivity : ComponentActivity() {
                                                 FileOutputStream(tempFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
                                                 
                                                 drawingImageUri = Uri.fromFile(tempFile)
-                                                drawingOffset = Offset.Zero
-                                                drawingScale = 1f
-                                                drawingRotation = 0f
                                                 activeLayer = "Pen"
                                             }
                                             isDrawingMode = false
@@ -384,14 +387,12 @@ class MainActivity : ComponentActivity() {
                                             }) { Icon(Icons.Default.Delete, "Remove Layer", tint = Color.Red) }
                                         }
 
-                                        // GLOBAL UNDO ENGINE
                                         IconButton(onClick = { performUndo() }, enabled = undoStack.isNotEmpty()) {
-                                            Icon(Icons.Default.ArrowBack, "Undo Layer Change", tint = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.4f))
+                                            Icon(Icons.Default.ArrowBack, "Undo", tint = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.4f))
                                         }
                                         
-                                        // GLOBAL REDO ENGINE
                                         IconButton(onClick = { performRedo() }, enabled = redoStack.isNotEmpty()) {
-                                            Icon(Icons.Default.ArrowForward, "Redo Layer Change", tint = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.4f))
+                                            Icon(Icons.Default.ArrowForward, "Redo", tint = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.4f))
                                         }
 
                                         IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.Menu, "Menu") }
@@ -401,7 +402,11 @@ class MainActivity : ComponentActivity() {
                                             DropdownMenuItem(text = { Text("Load Main Image") }, onClick = { showMenu = false; basePicker.launch("image/*") })
                                             DropdownMenuItem(text = { Text("Load Image Overlay") }, onClick = { showMenu = false; overlayPicker.launch("image/*") })
                                             DropdownMenuItem(text = { Text("Add Text Overlay") }, onClick = { showMenu = false; showTextDialog = true })
-                                            DropdownMenuItem(text = { Text("Draw Overlay") }, onClick = { showMenu = false; isDrawingMode = true }, enabled = baseImageUri != null)
+                                            DropdownMenuItem(text = { Text("Draw Overlay") }, onClick = { 
+                                                showMenu = false
+                                                saveHistory()
+                                                isDrawingMode = true 
+                                            }, enabled = baseImageUri != null)
                                             DropdownMenuItem(text = { Text("Saved Overlays") }, onClick = { showMenu = false; showInventory = true; refreshInventory() })
                                             DropdownMenuItem(text = { Text("Import Custom Font (.ttf)") }, onClick = { showMenu = false; fontPicker.launch("*/*") })
                                         }
@@ -466,9 +471,9 @@ class MainActivity : ComponentActivity() {
                                                 val penBg = if (activeLayer == "Pen" && !isLocked) MaterialTheme.colorScheme.primary else Color.Transparent
                                                 val lockBg = if (isLocked) MaterialTheme.colorScheme.primary else Color.Transparent
 
-                                                TextButton(onClick = { activeLayer = "Text"; isLocked = false }, modifier = Modifier.weight(1f).background(textBg, CircleShape)) { Text("Move Text", color = if (activeLayer == "Text" && !isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
-                                                TextButton(onClick = { activeLayer = "Pen"; isLocked = false }, modifier = Modifier.weight(1f).background(penBg, CircleShape)) { Text("Move Pen", color = if (activeLayer == "Pen" && !isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
-                                                TextButton(onClick = { isLocked = true }, modifier = Modifier.weight(1f).background(lockBg, CircleShape)) { Text("🔒 Locked", color = if (isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
+                                                TextButton(onClick = { saveHistory(); activeLayer = "Text"; isLocked = false }, modifier = Modifier.weight(1f).background(textBg, CircleShape)) { Text("Move Text", color = if (activeLayer == "Text" && !isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
+                                                TextButton(onClick = { saveHistory(); activeLayer = "Pen"; isLocked = false }, modifier = Modifier.weight(1f).background(penBg, CircleShape)) { Text("Move Pen", color = if (activeLayer == "Pen" && !isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
+                                                TextButton(onClick = { saveHistory(); isLocked = true }, modifier = Modifier.weight(1f).background(lockBg, CircleShape)) { Text("🔒 Locked", color = if (isLocked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) }
                                             }
                                         }
 
@@ -481,12 +486,12 @@ class MainActivity : ComponentActivity() {
                                                     refreshInventory()
                                                 } else Toast.makeText(context, "No active overlay to save.", Toast.LENGTH_SHORT).show()
                                             }) { Text("Save Overlay") }
-                                            OutlinedButton(onClick = { baseRotation = (baseRotation + 90f) % 360f }, enabled = baseImageUri != null) { Text("Rotate Base") }
+                                            OutlinedButton(onClick = { saveHistory(); baseRotation = (baseRotation + 90f) % 360f }, enabled = baseImageUri != null) { Text("Rotate Base") }
                                         }
 
                                         Spacer(modifier = Modifier.height(10.dp))
                                         Text("Opacity: ${(overlayAlpha * 100).toInt()}%", fontSize = 12.sp)
-                                        Slider(value = overlayAlpha, onValueChange = { overlayAlpha = it }, valueRange = 0f..1f)
+                                        Slider(value = overlayAlpha, onValueChange = { overlayAlpha = it }, onValueChangeFinished = { saveHistory() }, valueRange = 0f..1f)
                                         
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -501,7 +506,6 @@ class MainActivity : ComponentActivity() {
 
                                         Spacer(modifier = Modifier.height(10.dp))
 
-                                        // QOL: Custom File Name Input
                                         OutlinedTextField(
                                             value = outputFileName,
                                             onValueChange = { outputFileName = it },
@@ -553,7 +557,6 @@ class MainActivity : ComponentActivity() {
                                                                     mutableBase.compress(cf, exportQuality.toInt(), out)
                                                                 }
                                                                 
-                                                                // Apply Custom Name OR Fallback to Timestamp
                                                                 val finalName = if (outputFileName.isNotBlank()) outputFileName else "Watermark_${System.currentTimeMillis()}"
                                                                 
                                                                 val savedUri = saveToGallery(context, File(outputPath), "$finalName.${outputFormat.lowercase()}")
@@ -565,7 +568,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth().height(50.dp)
-                                        ) { Text("SAVE IMAGE") } // QOL: Clearer Button Label
+                                        ) { Text("SAVE IMAGE") }
                                     }
                                 }
                             }
@@ -699,7 +702,12 @@ class MainActivity : ComponentActivity() {
                                         .pointerInput(effectiveLayer) {
                                             detectTapGestures(
                                                 onDoubleTap = {
-                                                    if (effectiveLayer == "Text" && overlayText.isNotEmpty()) showTextDialog = true
+                                                    if (effectiveLayer == "Text") {
+                                                        showTextDialog = true
+                                                    } else if (effectiveLayer == "Pen") {
+                                                        saveHistory()
+                                                        isDrawingMode = true
+                                                    }
                                                 }
                                             )
                                         }
@@ -707,7 +715,9 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 if (isDrawingMode && !isEyedropperMode && baseBitmap != null) {
-                                    Canvas(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                    // CRITICAL FIX: Adding dx, dy, and baseScaleUI as keys ensures the touch area recalculates
+                                    // its offset if the screen layout boundaries change (like when opening drawing mode).
+                                    Canvas(modifier = Modifier.fillMaxSize().pointerInput(dx, dy, baseScaleUI) {
                                         detectDragGestures(
                                             onDragStart = { offset ->
                                                 val bx = (offset.x - dx) / baseScaleUI
@@ -733,30 +743,30 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
                                     }) {
-                                        drawContext.canvas.save()
-                                        drawContext.canvas.translate(dx, dy)
-                                        drawContext.canvas.scale(baseScaleUI, baseScaleUI)
-                                        
-                                        drawPaths.forEach { stroke ->
-                                            drawPath(
-                                                path = stroke.path.asComposePath(),
-                                                color = Color(stroke.color),
-                                                style = Stroke(width = stroke.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                                            )
-                                        }
-                                        currentDrawStroke.takeIf { it.size > 1 }?.let { points ->
-                                            val composePath = androidx.compose.ui.graphics.Path()
-                                            composePath.moveTo(points.first().x, points.first().y)
-                                            for (i in 1 until points.size) {
-                                                composePath.lineTo(points[i].x, points[i].y)
+                                        withTransform({
+                                            translate(dx, dy)
+                                            scale(baseScaleUI, baseScaleUI, Offset.Zero)
+                                        }) {
+                                            drawPaths.forEach { stroke ->
+                                                drawPath(
+                                                    path = stroke.path.asComposePath(),
+                                                    color = Color(stroke.color),
+                                                    style = Stroke(width = stroke.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                                )
                                             }
-                                            drawPath(
-                                                path = composePath,
-                                                color = drawColor,
-                                                style = Stroke(width = drawStrokeWidth / baseScaleUI, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                                            )
+                                            currentDrawStroke.takeIf { it.size > 1 }?.let { points ->
+                                                val composePath = androidx.compose.ui.graphics.Path()
+                                                composePath.moveTo(points.first().x, points.first().y)
+                                                for (i in 1 until points.size) {
+                                                    composePath.lineTo(points[i].x, points[i].y)
+                                                }
+                                                drawPath(
+                                                    path = composePath,
+                                                    color = drawColor,
+                                                    style = Stroke(width = drawStrokeWidth / baseScaleUI, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                                )
+                                            }
                                         }
-                                        drawContext.canvas.restore()
                                     }
                                 }
 
@@ -816,7 +826,7 @@ class MainActivity : ComponentActivity() {
 """
     with open(f"{package_path}/MainActivity.kt", "w") as f:
         f.write(main_activity_content)
-    print("✅ 5-4 Generated UI (Custom Image Naming & Clear Output Buttons)")
+    print("✅ 5-4 Generated UI (Coordinate Shift Fixed & Pen Tool Edit Restored)")
 
 if __name__ == "__main__":
     generate()
