@@ -1,6 +1,15 @@
 import os
+import json
+
+def load_config():
+    with open("scripts/config.json", "r") as f:
+        return json.load(f)
 
 def generate():
+    # Load central configuration
+    config = load_config()
+    admob_ad_unit_id = config.get("admob_ad_unit_id", "ca-app-pub-7732503595590477/4459993522")
+
     package_path = "app/src/main/java/com/watermarker"
     os.makedirs(package_path, exist_ok=True)
 
@@ -117,6 +126,9 @@ class AppOpenAdManager(private val context: Context) {
         appOpenAd?.show(activity)
     }
 }"""
+    
+    # Replace the hardcoded Ad Unit ID with the one from config.json
+    ad_manager_content = ad_manager_content.replace("ca-app-pub-7732503595590477/4459993522", admob_ad_unit_id)
 
     engine_content = """package com.watermarker
 import android.graphics.Bitmap
