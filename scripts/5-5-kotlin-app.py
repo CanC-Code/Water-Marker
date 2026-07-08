@@ -1,6 +1,15 @@
 import os
+import json
+
+def load_config():
+    with open("scripts/config.json", "r") as f:
+        return json.load(f)
 
 def generate():
+    # Load central configuration
+    config = load_config()
+    admob_ad_unit_id = config.get("admob_ad_unit_id", "ca-app-pub-7732503595590477/4459993522")
+
     package_path = "app/src/main/java/com/watermarker"
     os.makedirs(package_path, exist_ok=True)
 
@@ -129,6 +138,9 @@ class WatermarkerApp : Application(), Application.ActivityLifecycleCallbacks {
     }
 }
 """
+    # Replace the hardcoded Ad Unit ID with the one from config.json
+    app_content = app_content.replace("ca-app-pub-7732503595590477/4459993522", admob_ad_unit_id)
+
     with open(f"{package_path}/WatermarkerApp.kt", "w") as f:
         f.write(app_content)
     print("✅ 5-5 Generated WatermarkerApp.kt (Cold Boot AdMob Fix)")
