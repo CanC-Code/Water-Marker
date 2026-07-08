@@ -1,6 +1,15 @@
 import os
+import json
+
+def load_config():
+    with open("scripts/config.json", "r") as f:
+        return json.load(f)
 
 def generate():
+    # Load central configuration
+    config = load_config()
+    admob_app_id = config.get("admob_app_id", "ca-app-pub-7732503595590477~5528698466")
+
     manifest_dir = "app/src/main"
     res_values_dir = "app/src/main/res/values"
     os.makedirs(manifest_dir, exist_ok=True)
@@ -62,6 +71,9 @@ def generate():
     </application>
 </manifest>
 """
+    # Replace the hardcoded App ID with the one from config.json
+    manifest_content = manifest_content.replace("ca-app-pub-7732503595590477~5528698466", admob_app_id)
+
     with open(f"{manifest_dir}/AndroidManifest.xml", "w") as f:
         f.write(manifest_content)
     
