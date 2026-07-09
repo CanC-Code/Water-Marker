@@ -1,0 +1,3 @@
+ninja: Entering directory `/home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/arm64-v8a'
+[1/2] Building CXX object CMakeFiles/watermarker.dir/native-engine.cpp.o
+[2/2] Linking CXX shared library /home/runner/work/Water-Marker/Water-Marker/app/build/intermediates/cxx/Debug/6s13c221/obj/arm64-v8a/libwatermarker.so

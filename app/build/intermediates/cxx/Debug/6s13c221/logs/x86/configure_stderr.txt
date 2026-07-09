@@ -1,0 +1,87 @@
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /usr/local/lib/android/sdk/cmake/3.31.5/share/cmake-3.31/Modules/CMakeDetermineSystem.cmake:146 (include)
+  CMakeLists.txt:3 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android-legacy.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:54 (include)
+  /usr/local/lib/android/sdk/cmake/3.31.5/share/cmake-3.31/Modules/CMakeDetermineSystem.cmake:146 (include)
+  CMakeLists.txt:3 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/3.31.5/CMakeSystem.cmake:6 (include)
+  CMakeLists.txt:3 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/3.31.5/CMakeSystem.cmake:6 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/CMakeScratch/TryCompile-oXGYjF/CMakeLists.txt:2 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android-legacy.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:54 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/3.31.5/CMakeSystem.cmake:6 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/CMakeScratch/TryCompile-oXGYjF/CMakeLists.txt:2 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/3.31.5/CMakeSystem.cmake:6 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/CMakeScratch/TryCompile-0cAuxQ/CMakeLists.txt:2 (project)
+
+
+CMake Deprecation Warning at /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android-legacy.toolchain.cmake:34 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /usr/local/lib/android/sdk/ndk/25.1.8937393/build/cmake/android.toolchain.cmake:54 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/3.31.5/CMakeSystem.cmake:6 (include)
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86/CMakeFiles/CMakeScratch/TryCompile-0cAuxQ/CMakeLists.txt:2 (project)
+
+

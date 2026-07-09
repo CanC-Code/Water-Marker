@@ -1,0 +1,4 @@
+/usr/local/lib/android/sdk/cmake/3.31.5/bin/ninja \
+  -C \
+  /home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86 \
+  watermarker

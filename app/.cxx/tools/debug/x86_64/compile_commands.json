@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/runner/work/Water-Marker/Water-Marker/app/.cxx/Debug/6s13c221/x86_64",
+  "command": "/usr/local/lib/android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android24 --sysroot=/usr/local/lib/android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/sysroot -Dwatermarker_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -fno-limit-debug-info  -fPIC -o CMakeFiles/watermarker.dir/native-engine.cpp.o -c /home/runner/work/Water-Marker/Water-Marker/app/src/main/cpp/native-engine.cpp",
+  "file": "/home/runner/work/Water-Marker/Water-Marker/app/src/main/cpp/native-engine.cpp",
+  "output": "CMakeFiles/watermarker.dir/native-engine.cpp.o"
+}
+]
